@@ -51,17 +51,48 @@ const renderContent = () => {
           <div className="header-container">
             <h1 className="logo">YouMatter</h1>
             <nav className="nav">
-              <Link className="nav-link" to="/home">Home</Link>
-              <Link className="nav-link" to="/submit">Submit Complaint</Link>
-              <Link className="nav-link" to="/status">Check Status</Link>
-              <Link className="nav-link" to="/resources">Resources</Link>
-              <Link className="nav-link" to="/login" style={{ marginLeft: '1rem' }}>Login Page</Link>
+              <Link 
+                className="nav-link" 
+                to="/home"
+                style={{ textDecoration: 'none', color: 'white', textTransform: 'uppercase' }}
+              >
+                Home
+              </Link>
+              <Link 
+                className="nav-link" 
+                to="/submit"
+                style={{ textDecoration: 'none', color: 'white', textTransform: 'uppercase' }}
+              >
+                Submit Complaint
+              </Link>
+              <Link 
+                className="nav-link" 
+                to="/status"
+                style={{ textDecoration: 'none', color: 'white', textTransform: 'uppercase' }}
+              >
+                Check Status
+              </Link>
+              <Link 
+                className="nav-link" 
+                to="/resources"
+                style={{ textDecoration: 'none', color: 'white', textTransform: 'uppercase' }}
+              >
+                Resources
+              </Link>
               <button
                 className="nav-link"
                 onClick={() => setShowLogin(true)}
-                style={{ marginLeft: '0.5rem', background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{ 
+                  marginLeft: '0.5rem', 
+                  background: 'none', 
+                  border: 'none', 
+                  cursor: 'pointer',
+                  textDecoration: 'none',
+                  color: 'white',
+                  textTransform: 'uppercase'
+                }}
               >
-                Login Popup
+                Login
               </button>
             </nav>
           </div>
