@@ -413,11 +413,13 @@ a.nav-link::after {
 /* Submit Complain Styles */
 .submit-complaint {
   background: white;
-  padding: 2rem;
+  padding: 3rem;
   border-radius: 15px;
   box-shadow: 0 5px 15px rgba(0,0,0,0.08);
   max-width: 800px;
   margin: 0 auto;
+  margin-top: 25px;
+  margin-bottom: 25px;
 }
 
 .submit-complaint h2 {
@@ -575,3 +577,150 @@ input:checked + .slider:before {
   transform: translateY(-2px);
 }
 /* Submit Complain Styles end */
+
+/* Complaint Status Styles */
+.complaint-status {
+  background: white;
+  padding: 2rem;
+  border-radius: 15px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+}
+
+.complaint-status h2 {
+  color: #2c3e50;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.no-complaints {
+  text-align: center;
+  padding: 3rem;
+  color: #7f8c8d;
+}
+
+.complaints-list {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.complaint-card {
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 1.5rem;
+  background: #f8f9fa;
+}
+
+.complaint-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.complaint-header h3 {
+  color: #2c3e50;
+  margin: 0;
+}
+
+.status {
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status.pending {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status.investigating {
+  background: #cce5ff;
+  color: #004085;
+}
+
+.status.resolved {
+  background: #d4edda;
+  color: #155724;
+}
+
+.complaint-details p {
+  margin: 0.5rem 0;
+  color: #495057;
+}
+
+/* Resources Styles */
+.resources {
+  background: white;
+  padding: 2rem;
+  border-radius: 15px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+  margin-top: 25px;
+  margin-bottom: 25px;
+}
+
+.resources h2 {
+  color: #2c3e50;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.resource-section {
+  margin-bottom: 3rem;
+}
+
+.resource-section h3 {
+  color: #2c3e50;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #667eea;
+  padding-bottom: 0.5rem;
+}
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.contact-card {
+  background: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 10px;
+  text-align: center;
+  border-left: 4px solid #667eea;
+}
+
+.contact-card h4 {
+  color: #2c3e50;
+  margin-bottom: 1rem;
+}
+
+.contact-card p {
+  color: #495057;
+  margin: 0.5rem 0;
+}
+
+.bullying-types,
+.rights-list {
+  list-style: none;
+  padding: 0;
+}
+
+.bullying-types li,
+.rights-list li {
+  background: #f8f9fa;
+  padding: 1rem;
+  margin: 0.5rem 0;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+/* Footer */
+.footer {
+  background: #2c3e50;
+  color: white;
+  text-align: center;
+  padding: 1rem 0;
+  margin-top: auto;
+}

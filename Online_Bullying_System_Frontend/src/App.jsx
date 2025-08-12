@@ -191,7 +191,7 @@ function LoginModal({ onLogin, onClose }) {
       <h2>Login</h2>
       <form onSubmit={handleSubmit}>
         <label>
-          Username:
+          Email:
           <input
             type="text"
             value={username}
@@ -231,7 +231,7 @@ function LoginPage({ onLogin }) {
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: 12 }}>
           <label>
-            Username:
+            Email:
             <input
               type="text"
               value={username}
@@ -421,11 +421,91 @@ function SubmitComplaint({ onSubmit }) {
   )
 }
 
+// Check Status Component
 function ComplaintStatus({ complaints }) {
-  return <div>Complaint Status Page</div>
+  return (
+    <div className="complaint-status">
+      <h2>Complaint Status</h2>
+
+      {complaints.length === 0 ? (
+        <div className="no-complaints">
+          <p>No complaints submitted yet.</p>
+        </div>
+      ) : (
+        <div className="complaints-list">
+          {complaints.map(complaint => (
+            <div key={complaint.id} className="complaint-card">
+              <div className="complaint-header">
+                <h3>Complaint #{complaint.id}</h3>
+                <span className={`status ${complaint.status}`}>
+                  {complaint.status.toUpperCase()}
+                </span>
+              </div>
+              <div className="complaint-details">
+                <p><strong>Type:</strong> {complaint.incidentType}</p>
+                <p><strong>Submitted:</strong> {complaint.submittedAt}</p>
+                <p><strong>Room:</strong> {complaint.roomNumber}</p>
+                {!complaint.anonymous && (
+                  <p><strong>Student:</strong> {complaint.studentName}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
+// Resources Component
 function Resources() {
-  return <div>Resources Page</div>
+  return (
+    <div className="resources">
+      <h2>Support Resources</h2>
+
+      <div className="resource-section">
+        <h3>Emergency Contacts</h3>
+        <div className="contact-grid">
+          <div className="contact-card">
+            <h4>Student Counselor</h4>
+            <p>📞 04-1234567</p>
+            <p>📧 counselor@inti.edu.my</p>
+          </div>
+          <div className="contact-card">
+            <h4>Talian Kasih (Counselors)</h4>
+            <p>📞 15999</p>
+            <p>📧 counselor@hostel.edu</p>
+          </div>
+          <div className="contact-card">
+            <h4>Emergency Services</h4>
+            <p>📞 999</p>
+            <p>Available 24/7</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="resource-section">
+        <h3>What Constitutes Bullying?</h3>
+        <ul className="bullying-types">
+          <li><strong>Physical Bullying:</strong> Hitting, kicking, pushing, damaging property</li>
+          <li><strong>Verbal Bullying:</strong> Name-calling, insults, threats, inappropriate comments</li>
+          <li><strong>Social Bullying:</strong> Exclusion, spreading rumors, public embarrassment</li>
+          <li><strong>Cyber Bullying:</strong> Online harassment, threatening messages, sharing private information</li>
+        </ul>
+      </div>
+
+      <div className="resource-section">
+        <h3>Your Rights</h3>
+        <ul className="rights-list">
+          <li>Right to feel safe in your living environment</li>
+          <li>Right to report incidents without fear of retaliation</li>
+          <li>Right to confidential support and counseling</li>
+          <li>Right to have complaints investigated promptly</li>
+          <li>Right to be treated with dignity and respect</li>
+        </ul>
+      </div>
+    </div>
+  )
 }
+
 export default App;
