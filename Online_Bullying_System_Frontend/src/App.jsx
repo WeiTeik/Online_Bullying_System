@@ -468,13 +468,21 @@ function Resources() {
         <div className="contact-grid">
           <div className="contact-card">
             <h4>Student Counselor</h4>
-            <p>📞 04-1234567</p>
+            <p>📞 +604-1234567</p>
             <p>📧 counselor@inti.edu.my</p>
           </div>
           <div className="contact-card">
             <h4>Talian Kasih (Counselors)</h4>
             <p>📞 15999</p>
-            <p>📧 counselor@hostel.edu</p>
+            <p>
+              <a 
+                href="https://www.kpwkm.gov.my/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style={{ color: '#007bff', textDecoration: 'underline' }}
+              > https://www.kpwkm.gov.my/
+              </a>
+            </p>
           </div>
           <div className="contact-card">
             <h4>Emergency Services</h4>
