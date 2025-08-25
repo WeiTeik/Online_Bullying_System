@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import YouMatterLogo from '../assets/YouMatter_logo_bg_removed.png'; 
+import GoogleLogo from '../assets/google_logo.png';
 
 //Login popup
 function LoginModal({ onLogin, onClose }) {
@@ -10,35 +12,59 @@ function LoginModal({ onLogin, onClose }) {
     onLogin(username, password)
   }
 
+  const handleGoogleSignIn = () => {
+    alert('Google Sign-In not implemented yet.');
+  }
+
   return (
-  <div className="login-modal-overlay">
-    <div className="login-modal-box">
-      <button className="login-modal-close" onClick={onClose}>&times;</button>
-      <h2>Login</h2>
-      <form onSubmit={handleSubmit}>
-        <label>
-          Email:
-          <input
-            type="text"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            required
+    <div className="login-modal-overlay">
+      <div className="login-modal-box">
+        <button className="login-modal-close" onClick={onClose}>&times;</button>
+        <h2>Login</h2>
+        <form onSubmit={handleSubmit}>
+          <label>
+            Email:
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              required
+            />
+          </label>
+          <label>
+            Password:
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+            />
+          </label>
+          <button type="submit">Login</button>
+        </form>
+        <hr className="login-divider" />
+        <button
+          className="google-signin-btn-modal"
+          onClick={handleGoogleSignIn}
+          type="button"
+        >
+          <img
+            src={GoogleLogo}
+            alt="Google"
+            className="google-icon"
           />
-        </label>
-        <label>
-          Password:
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
+          <span className="google-signin-text">Sign in with Google</span>
+          <img
+            src={GoogleLogo}
+            alt=""
+            className="google-icon google-icon-placeholder"
+            aria-hidden="true"
+            style={{ visibility: 'hidden' }}
           />
-        </label>
-        <button type="submit">Login</button>
-      </form>
+        </button>
+      </div>
     </div>
-  </div>
-)
+  )
 }
 
 //login page
@@ -51,11 +77,20 @@ function LoginPage({ onLogin }) {
     onLogin(username, password)
   }
 
+  // Dummy Google sign-in handler
+  const handleGoogleSignIn = () => {
+    alert('Google Sign-In not implemented yet.');
+  }
+
   return (
-    <div className="login-page" style={{ maxWidth: 400, margin: '2rem auto', padding: 24, border: '1px solid #ccc', borderRadius: 8 }}>
+    <div className="login-page">
+      <img
+        src={YouMatterLogo}
+        alt="YouMatter Logo"
+      />
       <h2>Login</h2>
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 12 }}>
+        <div>
           <label>
             Email:
             <input
@@ -63,11 +98,10 @@ function LoginPage({ onLogin }) {
               value={username}
               onChange={e => setUsername(e.target.value)}
               required
-              style={{ width: '100%', padding: 8, marginTop: 4 }}
             />
           </label>
         </div>
-        <div style={{ marginBottom: 12 }}>
+        <div>
           <label>
             Password:
             <input
@@ -75,12 +109,31 @@ function LoginPage({ onLogin }) {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              style={{ width: '100%', padding: 8, marginTop: 4 }}
             />
           </label>
         </div>
-        <button type="submit" style={{ width: '100%', padding: 10 }}>Login</button>
+        <button type="submit">Login</button>
       </form>
+      <hr className="login-divider" />
+      <button
+        className="google-signin-btn"
+        onClick={handleGoogleSignIn}
+        type="button"
+      >
+        <img
+          src={GoogleLogo}
+          alt="Google"
+          className="google-icon"
+        />
+        <span className="google-signin-text">Sign in with Google</span>
+        <img
+          src={GoogleLogo}
+          alt=""
+          className="google-icon google-icon-placeholder"
+          aria-hidden="true"
+          style={{ visibility: 'hidden' }}
+        />
+      </button>
     </div>
   )
 }

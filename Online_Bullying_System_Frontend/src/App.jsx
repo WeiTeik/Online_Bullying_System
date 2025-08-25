@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import HomePage from './components/StudentHome';
 import { LoginModal, LoginPage } from './components/Login';
 import { SubmitComplaint } from './components/SubmitComplaint';
@@ -13,7 +13,10 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
 
-    const handleSubmitComplaint = (complaint) => {
+  // Add this inside App to get the current route
+  const location = useLocation();
+
+  const handleSubmitComplaint = (complaint) => {
     const newComplaint = {
       id: Date.now(),
       ...complaint,
@@ -32,7 +35,7 @@ function App() {
     }
   }
 
-const renderContent = () => {
+  const renderContent = () => {
     switch (activeSection) {
       case 'login':
         return <LoginPage onLogin={handleLogin} />
@@ -50,8 +53,9 @@ const renderContent = () => {
   }
   
   return (
-    <Router>
-      <div className="App">
+    <div className="App">
+      {/* Hide header if on /login route */}
+      {location.pathname !== '/login' && (
         <header className="header">
           <div className="header-container">
             <h1 className="logo">YouMatter</h1>
@@ -102,31 +106,31 @@ const renderContent = () => {
             </nav>
           </div>
         </header>
-        
-        <main className="main-content">
-          <Routes>
-            <Route path="/home" element={<HomePage />} />
-            <Route path="/submit" element={<SubmitComplaint onSubmit={handleSubmitComplaint} />} />
-            <Route path="/status" element={<ComplaintStatus complaints={complaints} />} />
-            <Route path="/resources" element={<Resources />} />
-            <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
-            <Route path="*" element={<HomePage />} />
-          </Routes>
-          {showLogin && (
-            <LoginModal
-              onLogin={handleLogin}
-              onClose={() => setShowLogin(false)}
-            />
-          )}
-        </main>
-        
-        <footer className="footer">
-          <div className="container">
-            <p>&copy; 2025 YouMatter. Your safety is our priority.</p>
-          </div>
-        </footer>
-      </div>
-    </Router>
+      )}
+      
+      <main className="main-content">
+        <Routes>
+          <Route path="/home" element={<HomePage />} />
+          <Route path="/submit" element={<SubmitComplaint onSubmit={handleSubmitComplaint} />} />
+          <Route path="/status" element={<ComplaintStatus complaints={complaints} />} />
+          <Route path="/resources" element={<Resources />} />
+          <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+          <Route path="*" element={<HomePage />} />
+        </Routes>
+        {showLogin && (
+          <LoginModal
+            onLogin={handleLogin}
+            onClose={() => setShowLogin(false)}
+          />
+        )}
+      </main>
+      
+      <footer className="footer">
+        <div className="container">
+          <p>&copy; 2025 YouMatter. Your safety is our priority.</p>
+        </div>
+      </footer>
+    </div>
   );
 }
 
