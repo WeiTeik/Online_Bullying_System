@@ -9,14 +9,34 @@ function SubmitComplaint({ onSubmit }) {
     description: '',
     incidentDate: '',
     witnesses: '',
-    anonymous: false
+    anonymous: false,
+    attachments: []
   })
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target
+    const { name, value, type, checked, files } = e.target
+    if (type === 'file') {
+      setFormData(prev => ({
+        ...prev,
+        attachments: [
+          ...prev.attachments,
+          ...Array.from(files).filter(
+            file => !prev.attachments.some(f => f.name === file.name && f.size === file.size)
+          )
+        ]
+      }))
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value
+      }))
+    }
+  }
+
+  const handleRemoveAttachment = (index) => {
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      attachments: prev.attachments.filter((_, i) => i !== index)
     }))
   }
 
@@ -31,7 +51,8 @@ function SubmitComplaint({ onSubmit }) {
       description: '',
       incidentDate: '',
       witnesses: '',
-      anonymous: false
+      anonymous: false,
+      attachments: []
     })
     alert('Complaint submitted successfully!')
   }
@@ -152,6 +173,34 @@ function SubmitComplaint({ onSubmit }) {
             rows="3"
             placeholder="Names or descriptions of any witnesses..."
           />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="attachment">Attachment (optional):</label>
+          <input
+            type="file"
+            id="attachment"
+            name="attachment"
+            multiple
+            onChange={handleChange}
+            style={{ display: 'block' }}
+          />
+          {formData.attachments.length > 0 && (
+            <ul className="attachment-list">
+              {formData.attachments.map((file, idx) => (
+                <li key={idx} className="attachment-list-item">
+                  <span className="attachment-file-name">{file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAttachment(idx)}
+                    className="attachment-remove-btn"
+                  >
+                    remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <button type="submit" className="submit-btn">
