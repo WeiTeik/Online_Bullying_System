@@ -623,6 +623,7 @@ a.nav-link::after {
   border-radius: 8px;
   font-size: 1rem;
   transition: border-color 0.3s ease;
+  resize: none;
 }
 
 .form-group input:focus,
@@ -741,6 +742,32 @@ input:checked + .slider:before {
 .submit-btn:hover {
   transform: translateY(-2px);
 }
+
+.attachment-list {
+  margin-top: 0.5rem;
+  padding-left: 1rem;
+}
+
+.attachment-list-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.attachment-file-name {
+  margin-right: 8px;
+}
+
+.attachment-remove-btn {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
 /* Submit Complain Styles end */
 
 /* Complaint Status Styles */
