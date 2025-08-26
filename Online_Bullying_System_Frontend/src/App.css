@@ -11,10 +11,28 @@ body {
   background-color: #FFF9FE;
 }
 
+/* App Styles */
 .App {
   /* font-family: 'Arial', sans-serif; */
   min-height: 100vh;
 }
+.nav button.nav-link {
+  text-decoration: none !important;
+  color: white !important;
+  text-transform: uppercase !important;
+  background: none !important;
+  border: none !important;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: normal;
+  padding: 0.5rem ;
+}
+
+.login-btn {
+  margin-left: 0.5rem;
+}
+/* App Styles end */
 
 /* Header Styles */
 .header {

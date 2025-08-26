@@ -64,43 +64,30 @@ function App() {
               <Link 
                 className="nav-link" 
                 to="/home"
-                style={{ textDecoration: 'none', color: 'white', textTransform: 'uppercase' }}
               >
                 Home
               </Link>
               <Link 
                 className="nav-link" 
                 to="/submit"
-                style={{ textDecoration: 'none', color: 'white', textTransform: 'uppercase' }}
               >
                 Submit Complaint
               </Link>
               <Link 
                 className="nav-link" 
                 to="/status"
-                style={{ textDecoration: 'none', color: 'white', textTransform: 'uppercase' }}
               >
                 Check Status
               </Link>
               <Link 
                 className="nav-link" 
                 to="/resources"
-                style={{ textDecoration: 'none', color: 'white', textTransform: 'uppercase' }}
               >
                 Resources
               </Link>
               <button
-                className="nav-link"
+                className="nav-link login-btn"
                 onClick={() => setShowLogin(true)}
-                style={{ 
-                  marginLeft: '0.5rem', 
-                  background: 'none', 
-                  border: 'none', 
-                  cursor: 'pointer',
-                  textDecoration: 'none',
-                  color: 'white',
-                  textTransform: 'uppercase'
-                }}
               >
                 Login
               </button>
