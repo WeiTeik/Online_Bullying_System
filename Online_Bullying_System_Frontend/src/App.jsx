@@ -5,6 +5,7 @@ import { LoginModal, LoginPage } from './components/Login';
 import { SubmitComplaint } from './components/SubmitComplaint';
 import { ComplaintStatus } from './components/CheckStatus';
 import { Resources } from './components/Resources';
+import StudentProfilePage from './components/StudentProfilePage';
 import './App.css';
 
 function App() {
@@ -114,6 +115,7 @@ function App() {
           <Route path="/submit" element={<SubmitComplaint onSubmit={handleSubmitComplaint} />} />
           <Route path="/status" element={<ComplaintStatus complaints={complaints} />} />
           <Route path="/resources" element={<Resources />} />
+          <Route path="/profilepage" element={<StudentProfilePage complaints={complaints} />} />
           <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
           <Route path="*" element={<HomePage />} />
         </Routes>
