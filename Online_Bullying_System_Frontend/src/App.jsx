@@ -102,7 +102,7 @@ function App() {
           <Route path="/submit" element={<SubmitComplaint onSubmit={handleSubmitComplaint} />} />
           <Route path="/status" element={<ComplaintStatus complaints={complaints} />} />
           <Route path="/resources" element={<Resources />} />
-          <Route path="/profilepage" element={<StudentProfilePage complaints={complaints} />} />
+          <Route path="/profile" element={<StudentProfilePage complaints={complaints} />} />
           <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
           <Route path="*" element={<HomePage />} />
         </Routes>

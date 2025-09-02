@@ -186,16 +186,24 @@ function SubmitComplaint({ onSubmit }) {
             style={{ display: 'block' }}
           />
           {formData.attachments.length > 0 && (
-            <ul className="attachment-list">
+            <ul style={{ marginTop: '0.5rem', paddingLeft: '1rem' }}>
               {formData.attachments.map((file, idx) => (
-                <li key={idx} className="attachment-list-item">
-                  <span className="attachment-file-name">{file.name}</span>
+                <li key={idx} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ marginRight: 8 }}>{file.name}</span>
                   <button
                     type="button"
                     onClick={() => handleRemoveAttachment(idx)}
-                    className="attachment-remove-btn"
+                    style={{
+                      background: '#e74c3c',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '3px',
+                      padding: '2px 8px',
+                      cursor: 'pointer',
+                      fontSize: '0.9em'
+                    }}
                   >
-                    remove
+                    Delete
                   </button>
                 </li>
               ))}
