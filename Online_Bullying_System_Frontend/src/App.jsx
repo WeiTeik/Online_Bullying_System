@@ -6,6 +6,7 @@ import { SubmitComplaint } from './components/SubmitComplaint';
 import { ComplaintStatus } from './components/CheckStatus';
 import { Resources } from './components/Resources';
 import StudentProfilePage from './components/StudentProfilePage';
+import AdminDashboard from './components/admin/AdminDashboard';
 import './App.css';
 
 function App() {
@@ -55,36 +56,16 @@ function App() {
   
   return (
     <div className="App">
-      {/* Hide header if on /login route */}
-      {location.pathname !== '/login' && (
+      {/* Hide header if on /login or /admin route */}
+      {location.pathname !== '/login' && !location.pathname.startsWith('/admin') && (
         <header className="header">
           <div className="header-container">
             <h1 className="logo">YouMatter</h1>
             <nav className="nav">
-              <Link 
-                className="nav-link" 
-                to="/home"
-              >
-                Home
-              </Link>
-              <Link 
-                className="nav-link" 
-                to="/submit"
-              >
-                Submit Complaint
-              </Link>
-              <Link 
-                className="nav-link" 
-                to="/status"
-              >
-                Check Status
-              </Link>
-              <Link 
-                className="nav-link" 
-                to="/resources"
-              >
-                Resources
-              </Link>
+              <Link className="nav-link" to="/home">Home</Link>
+              <Link className="nav-link" to="/submit">Submit Complaint</Link>
+              <Link className="nav-link" to="/status">Check Status</Link>
+              <Link className="nav-link" to="/resources">Resources</Link>
               <button
                 className="nav-link login-btn"
                 onClick={() => setShowLogin(true)}
@@ -104,6 +85,7 @@ function App() {
           <Route path="/resources" element={<Resources />} />
           <Route path="/profile" element={<StudentProfilePage complaints={complaints} />} />
           <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+          <Route path="/admin/*" element={<AdminDashboard />} />
           <Route path="*" element={<HomePage />} />
         </Routes>
         {showLogin && (
