@@ -7,7 +7,7 @@ const mockUser = {
   avatar: "" // leave empty to use placeholder
 };
 
-function StudentProfilePage({ complaints = [] }) {
+function StudentProfilePage({ complaints = [], showHistory = true }) {
   const [activeTab, setActiveTab] = useState('account');
   const [showReset, setShowReset] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
@@ -50,12 +50,14 @@ function StudentProfilePage({ complaints = [] }) {
             Reset Password
           </div>
 
-          <div
-            onClick={() => { setActiveTab('history'); setShowReset(false); }}
-            className={`sidebar-item history ${activeTab === 'history' ? 'active' : ''}`}
-          >
-            History Complaint
-          </div>
+          {showHistory && (
+            <div
+              onClick={() => { setActiveTab('history'); setShowReset(false); }}
+              className={`sidebar-item history ${activeTab === 'history' ? 'active' : ''}`}
+            >
+              History Complaint
+            </div>
+          )}
         </div>
 
         {/* Main content */}
@@ -161,7 +163,7 @@ function StudentProfilePage({ complaints = [] }) {
             </div>
           )}
 
-          {activeTab === 'history' && (
+          {showHistory && activeTab === 'history' && (
             <div className="history-container">
               <h2 className="history-title">History Complaint</h2>
               {complaints.length === 0 ? (
