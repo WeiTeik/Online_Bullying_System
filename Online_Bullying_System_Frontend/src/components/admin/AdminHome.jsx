@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import './admin.css'; 
 
 // Demo report data (replace with import in production)
 const demoReportData = [
@@ -45,23 +46,23 @@ const AdminHome = () => {
       {/* Latest Reports Section */}
       <div className="latest-reports" style={{ marginTop: 32 }}>
         <h3 style={{ marginBottom: 12 }}>Latest Reports</h3>
-        <table className="report-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table className="report-table">
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', padding: '8px' }}>Date</th>
-              <th style={{ textAlign: 'left', padding: '8px' }}>Complaint ID</th>
-              <th style={{ textAlign: 'left', padding: '8px' }}>Name</th>
-              <th style={{ textAlign: 'left', padding: '8px' }}>Status</th>
-              <th style={{ textAlign: 'left', padding: '8px' }}>Action</th>
+              <th>Date</th>
+              <th>Complaint ID</th>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
             {latestReports.map((row) => (
               <tr key={row.id}>
-                <td style={{ padding: '8px' }}>{row.date}</td>
-                <td style={{ padding: '8px' }}>{row.id}</td>
-                <td style={{ padding: '8px' }}>{row.name}</td>
-                <td style={{ padding: '8px' }}>
+                <td>{row.date}</td>
+                <td>{row.id}</td>
+                <td>{row.name}</td>
+                <td>
                   <span
                     className={
                       `status-badge ${
@@ -78,7 +79,7 @@ const AdminHome = () => {
                     {row.status}
                   </span>
                 </td>
-                <td style={{ padding: '8px' }}>
+                <td>
                   <button className="action-btn" title="View Report Incident">View</button>
                 </td>
               </tr>
@@ -88,7 +89,6 @@ const AdminHome = () => {
         <div style={{ marginTop: 12, textAlign: 'right' }}>
           <button
             className="view-more-btn"
-            style={{ textDecoration: 'underline', color: '#1976d2', background: 'none', border: 'none', cursor: 'pointer' }}
             onClick={() => navigate('/admin/reports')}
           >
             View More
