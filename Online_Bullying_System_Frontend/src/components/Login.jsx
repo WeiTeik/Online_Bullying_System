@@ -3,13 +3,13 @@ import YouMatterLogo from '../assets/YouMatter_logo_bg_removed.png';
 import GoogleLogo from '../assets/google_logo.png';
 
 //Login popup
-function LoginModal({ onLogin, onClose }) {
-  const [username, setUsername] = useState('')
+function LoginModal({ onLogin, onClose, error, isLoading }) {
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onLogin(username, password)
+    onLogin(identifier, password)
   }
 
   const handleGoogleSignIn = () => {
@@ -23,12 +23,13 @@ function LoginModal({ onLogin, onClose }) {
         <h2>Login</h2>
         <form onSubmit={handleSubmit}>
           <label>
-            Email:
+            Email or Username:
             <input
               type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
+              value={identifier}
+              onChange={e => setIdentifier(e.target.value)}
               required
+              disabled={isLoading}
             />
           </label>
           <label>
@@ -38,10 +39,14 @@ function LoginModal({ onLogin, onClose }) {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
+              disabled={isLoading}
             />
           </label>
-          <button type="submit">Login</button>
+          <button type="submit" disabled={isLoading}>
+            {isLoading ? 'Logging in...' : 'Login'}
+          </button>
         </form>
+        {error && <p className="login-error">{error}</p>}
         <hr className="login-divider" />
         <button
           className="google-signin-btn-modal"
@@ -68,13 +73,13 @@ function LoginModal({ onLogin, onClose }) {
 }
 
 //login page
-function LoginPage({ onLogin }) {
-  const [username, setUsername] = useState('')
+function LoginPage({ onLogin, error, isLoading }) {
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onLogin(username, password)
+    onLogin(identifier, password)
   }
 
   // Dummy Google sign-in handler
@@ -92,12 +97,13 @@ function LoginPage({ onLogin }) {
       <form onSubmit={handleSubmit}>
         <div>
           <label>
-            Email:
+            Email or Username:
             <input
               type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
+              value={identifier}
+              onChange={e => setIdentifier(e.target.value)}
               required
+              disabled={isLoading}
             />
           </label>
         </div>
@@ -109,11 +115,15 @@ function LoginPage({ onLogin }) {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
+              disabled={isLoading}
             />
           </label>
         </div>
-        <button type="submit">Login</button>
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? 'Logging in...' : 'Login'}
+        </button>
       </form>
+      {error && <p className="login-error">{error}</p>}
       <hr className="login-divider" />
       <button
         className="google-signin-btn"

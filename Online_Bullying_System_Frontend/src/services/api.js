@@ -1,56 +1,78 @@
-import axios from 'axios';
+import axios from "axios";
 
-const API_BASE_URL = 'http://127.0.0.1:8000';
+const BASE = process.env.REACT_APP_API_BASE_URL || "http://localhost:5001/api";
+export const API_BASE = BASE;
+export const API_ORIGIN = BASE.replace(/\/api\/?$/, "");
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL: BASE,
+  headers: { "Content-Type": "application/json" },
 });
 
-// Add token to requests if available
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Token ${token}`;
-  }
-  return config;
-});
+// Optional: set auth token for protected endpoints
+export function setAuthToken(token) {
+  if (token) api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+  else delete api.defaults.headers.common["Authorization"];
+}
 
-// Response interceptor for handling errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+// Auth
+export async function login(identifier, password) {
+  const res = await api.post("/auth/login", { email: identifier, username: identifier, password });
+  return res.data;
+}
 
-export const complaintsAPI = {
-  getAll: () => api.get('/api/complaints/'),
-  create: (data) => api.post('/api/complaints/', data),
-  getById: (id) => api.get(`/api/complaints/${id}/`),
-  update: (id, data) => api.put(`/api/complaints/${id}/`, data),
-  delete: (id) => api.delete(`/api/complaints/${id}/`),
-  getMyComplaints: () => api.get('/api/complaints/my-complaints/'),
-  getStatistics: () => api.get('/api/complaints/statistics/'),
-};
+// Users
+export async function getUsers() {
+  const res = await api.get("/users");
+  return res.data;
+}
 
-export const authAPI = {
-  login: (credentials) => api.post('/api/users/auth/login/', credentials),
-  register: (userData) => api.post('/api/users/auth/register/', userData),
-  logout: () => api.post('/api/users/auth/logout/'),
-  getProfile: () => api.get('/api/users/profile/'),
-};
+export async function getUser(id) {
+  const res = await api.get(`/users/${id}`);
+  return res.data;
+}
 
-export const usersAPI = {
-  getAll: () => api.get('/api/users/'),
-  getById: (id) => api.get(`/api/users/${id}/`),
-  updateProfile: (data) => api.put('/api/users/profile/', data),
-};
+export async function createUser(payload) {
+  // payload: { username, email, password, role? }
+  const res = await api.post("/users", payload);
+  return res.data;
+}
+
+export async function updateUser(id, payload) {
+  // payload can include { username, email, password, role }
+  const res = await api.put(`/users/${id}`, payload);
+  return res.data;
+}
+
+export async function deleteUser(id) {
+  const res = await api.delete(`/users/${id}`);
+  return res.data;
+}
+
+export async function uploadUserAvatar(id, imageData) {
+  const res = await api.post(`/users/${id}/avatar`, { image: imageData });
+  return res.data;
+}
+
+export async function deleteUserAvatar(id) {
+  const res = await api.delete(`/users/${id}/avatar`);
+  return res.data;
+}
+
+export function toAbsoluteUrl(path) {
+  if (!path) return path;
+  if (/^https?:\/\//i.test(path)) return path;
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${API_ORIGIN}${normalized}`;
+}
+
+// Convenience: find first student and set role to admin
+export async function promoteFirstStudentToAdmin() {
+  const users = await getUsers();
+  const student = users.find(u => u && (u.role === "student" || u.role === "Student"));
+  if (!student) throw new Error("No student found");
+  const updated = await updateUser(student.id, { role: "admin" });
+  return updated;
+}
 
 export default api;

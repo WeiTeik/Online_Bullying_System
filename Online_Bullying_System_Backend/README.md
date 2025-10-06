@@ -1,44 +1,17 @@
-# Online Bullying System Backend
+# Flask API Project
 
-This project is a Django-based backend for an Online Bullying Complaint System. It provides a platform for users to submit complaints regarding bullying incidents and allows administrators to manage these complaints effectively.
+This project is a Flask-based API that provides a platform for handling various functionalities. It serves as a basic template for building RESTful APIs using Flask.
 
 ## Project Structure
 
 ```
-online-bullying-system-backend/
-├── manage.py                # Command-line utility for interacting with the Django project
+flask-api-project/
+├── app/                     # Main application directory
+│   ├── __init__.py          # Initializes the Flask application
+│   ├── routes.py            # Defines API endpoints
+│   └── models.py            # Data models for the application
 ├── requirements.txt         # List of Python packages required for the project
-├── online_bullying_system/   # Main Django application directory
-│   ├── __init__.py
-│   ├── settings.py          # Project settings and configuration
-│   ├── urls.py              # URL patterns for the project
-│   ├── wsgi.py              # WSGI configuration for deployment
-│   └── asgi.py              # ASGI configuration for deployment
-├── complaints/              # App for managing complaints
-│   ├── __init__.py
-│   ├── admin.py             # Admin site configuration for complaints
-│   ├── apps.py              # App configuration for complaints
-│   ├── models.py            # Data models for complaints
-│   ├── views.py             # Views for handling complaints
-│   ├── urls.py              # URL patterns for complaints app
-│   ├── serializers.py       # Serializers for complaint data
-│   └── migrations/          # Database migrations for complaints
-│       └── __init__.py
-├── users/                   # App for managing users
-│   ├── __init__.py
-│   ├── admin.py             # Admin site configuration for users
-│   ├── apps.py              # App configuration for users
-│   ├── models.py            # Data models for users
-│   ├── views.py             # Views for handling user-related requests
-│   ├── urls.py              # URL patterns for users app
-│   ├── serializers.py       # Serializers for user data
-│   └── migrations/          # Database migrations for users
-│       └── __init__.py
-├── static/                  # Static files (CSS, JS, images)
-│   ├── css
-│   ├── js
-│   └── images
-├── media/                   # Directory for uploaded media files
+├── config.py                # Configuration settings for the Flask application
 └── README.md                # Project documentation
 ```
 
@@ -47,7 +20,7 @@ online-bullying-system-backend/
 1. **Clone the repository:**
    ```
    git clone <repository-url>
-   cd online-bullying-system-backend
+   cd flask-api-project
    ```
 
 2. **Create a virtual environment:**
@@ -61,20 +34,15 @@ online-bullying-system-backend/
    pip install -r requirements.txt
    ```
 
-4. **Apply migrations:**
+4. **Run the application:**
    ```
-   python manage.py migrate
-   ```
-
-5. **Run the development server:**
-   ```
-   python manage.py runserver
+   flask run
    ```
 
 ## Usage
 
-- Access the API endpoints for complaints and users as defined in the `urls.py` files of the respective apps.
-- Use the Django admin interface to manage complaints and users.
+- Access the API endpoints defined in the `routes.py` file.
+- Modify the `models.py` file to define your data models as needed.
 
 ## Contributing
 
