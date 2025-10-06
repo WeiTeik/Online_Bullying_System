@@ -49,6 +49,11 @@ export async function deleteUser(id) {
   return res.data;
 }
 
+export async function changeUserPassword(id, payload) {
+  const res = await api.post(`/users/${id}/password`, payload);
+  return res.data;
+}
+
 export async function uploadUserAvatar(id, imageData) {
   const res = await api.post(`/users/${id}/avatar`, { image: imageData });
   return res.data;
