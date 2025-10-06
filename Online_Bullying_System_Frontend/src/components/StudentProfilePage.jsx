@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getUser, uploadUserAvatar, deleteUserAvatar, toAbsoluteUrl } from '../services/api';
+import { getUser, uploadUserAvatar, deleteUserAvatar, changeUserPassword, toAbsoluteUrl } from '../services/api';
 
 const MAX_AVATAR_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB
 
@@ -11,6 +11,8 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetMsg, setResetMsg] = useState('');
+  const [resetError, setResetError] = useState(null);
+  const [isResetting, setIsResetting] = useState(false);
   const [user, setUser] = useState(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState(null);
@@ -78,17 +80,54 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showAvatarMenu]);
 
-  const handleReset = (e) => {
+  useEffect(() => {
+    if (!showReset) {
+      setResetMsg('');
+      setResetError(null);
+      setIsResetting(false);
+    }
+  }, [showReset]);
+
+  const handleReset = async (e) => {
     e.preventDefault();
+    setResetMsg('');
+    setResetError(null);
+
     if (newPassword !== confirmPassword) {
-      setResetMsg('New passwords do not match.');
+      setResetError('New passwords do not match.');
       return;
     }
-    setResetMsg('Password reset successful.');
-    setOldPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setShowReset(false);
+
+    if (newPassword.length < 8) {
+      setResetError('New password must be at least 8 characters long.');
+      return;
+    }
+
+    if (!currentUser?.id) {
+      setResetError('Unable to verify your account. Please log in again.');
+      return;
+    }
+
+    try {
+      setIsResetting(true);
+      const response = await changeUserPassword(currentUser.id, {
+        old_password: oldPassword,
+        new_password: newPassword,
+      });
+      const message = response?.message || 'Password reset successful.';
+      setResetMsg(message);
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        'Failed to reset password. Please try again.';
+      setResetError(message);
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   if (!currentUser) {
@@ -336,6 +375,7 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
                     onChange={e => setOldPassword(e.target.value)}
                     required
                     className="form-input"
+                    disabled={isResetting}
                   />
                 </div>
 
@@ -343,12 +383,13 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
                   <div className="reset-col">
                     <label className="form-label">New Password</label>
                     <input
-                      type="password"
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      required
-                      className="form-input"
-                    />
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    required
+                    className="form-input"
+                    disabled={isResetting}
+                  />
                   </div>
                   <div className="reset-col">
                     <label className="form-label">Confirm</label>
@@ -358,12 +399,16 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
                       onChange={e => setConfirmPassword(e.target.value)}
                       required
                       className="form-input"
+                      disabled={isResetting}
                     />
                   </div>
                 </div>
 
-                <button type="submit" className="reset-submit">Submit</button>
+                <button type="submit" className="reset-submit" disabled={isResetting}>
+                  {isResetting ? 'Updating...' : 'Submit'}
+                </button>
 
+                {resetError && <div className="reset-error">{resetError}</div>}
                 {resetMsg && <div className="reset-msg">{resetMsg}</div>}
               </form>
             </div>

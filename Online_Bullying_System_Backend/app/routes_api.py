@@ -47,6 +47,33 @@ def api_delete_user(user_id):
         return jsonify({"error": "User not found"}), 404
     return jsonify({"success": True}), 200
 
+
+@api_bp.route("/users/<int:user_id>/password", methods=["POST"])
+def api_change_password(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json() or {}
+    old_password = data.get("old_password")
+    new_password = data.get("new_password")
+
+    if not old_password or not new_password:
+        return jsonify({"error": "Both old and new passwords are required."}), 400
+
+    if not user.check_password(old_password):
+        return jsonify({"error": "Old password is incorrect."}), 400
+
+    if len(new_password) < 8:
+        return jsonify({"error": "New password must be at least 8 characters long."}), 400
+
+    if new_password == old_password:
+        return jsonify({"error": "New password must be different from the old password."}), 400
+
+    user.set_password(new_password)
+    db.session.commit()
+    return jsonify({"success": True, "message": "Password updated successfully."}), 200
+
 @api_bp.route("/auth/login", methods=["POST"])
 def api_login():
     data = request.get_json() or {}

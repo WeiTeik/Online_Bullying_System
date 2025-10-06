@@ -1313,6 +1313,12 @@ input:checked + .slider:before {
   font-weight: 600;
 }
 
+.reset-error {
+  margin-top: 12px;
+  color: #c0392b;
+  font-weight: 600;
+}
+
 /* History / complaints */
 .history-container {
   width: 100%;
