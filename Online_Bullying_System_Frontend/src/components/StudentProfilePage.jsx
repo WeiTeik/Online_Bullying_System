@@ -1,20 +1,82 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getUser, uploadUserAvatar, deleteUserAvatar, toAbsoluteUrl } from '../services/api';
 
-const mockUser = {
-  name: "Ramon Ridwan",
-  studentId: "P20012847",
-  email: "Ramonridwan@protonmail.com",
-  avatar: "" // leave empty to use placeholder
-};
+const MAX_AVATAR_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB
 
-function StudentProfilePage({ complaints = [], showHistory = true }) {
+function StudentProfilePage({ complaints = [], showHistory = true, currentUser, onUserUpdate }) {
   const [activeTab, setActiveTab] = useState('account');
   const [showReset, setShowReset] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetMsg, setResetMsg] = useState('');
-  const [user, setUser] = useState(mockUser);
+  const [user, setUser] = useState(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [profileError, setProfileError] = useState(null);
+  const [avatarMessage, setAvatarMessage] = useState(null);
+  const [avatarError, setAvatarError] = useState(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+  const [avatarBusyMessage, setAvatarBusyMessage] = useState(null);
+  const fileInputRef = useRef(null);
+  const avatarMenuRef = useRef(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login');
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadProfile = async () => {
+      try {
+        setIsLoadingProfile(true);
+        setProfileError(null);
+
+        if (!currentUser.id) {
+          if (isMounted) {
+            setUser(currentUser);
+            setIsLoadingProfile(false);
+          }
+          return;
+        }
+
+        const data = await getUser(currentUser.id);
+        if (isMounted) {
+          setUser(data);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setProfileError('Unable to load full profile. Showing basic account info.');
+          setUser(currentUser);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingProfile(false);
+        }
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser, navigate]);
+
+  useEffect(() => {
+    if (!showAvatarMenu) return;
+    const handleClickOutside = (event) => {
+      if (avatarMenuRef.current && !avatarMenuRef.current.contains(event.target)) {
+        setShowAvatarMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showAvatarMenu]);
 
   const handleReset = (e) => {
     e.preventDefault();
@@ -29,7 +91,108 @@ function StudentProfilePage({ complaints = [], showHistory = true }) {
     setShowReset(false);
   };
 
-  const avatarSrc = user.avatar || 'https://via.placeholder.com/160?text=Avatar';
+  if (!currentUser) {
+    return null;
+  }
+
+  const handleAvatarChange = (event) => {
+    const fileInput = event.target;
+    const file = fileInput.files && fileInput.files[0];
+    if (!file || !currentUser?.id) return;
+
+    setShowAvatarMenu(false);
+    setAvatarError(null);
+    setAvatarMessage(null);
+
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Please choose an image file (PNG, JPG, GIF, WEBP).');
+      fileInput.value = '';
+      return;
+    }
+
+    if (file.size > MAX_AVATAR_SIZE_BYTES) {
+      setAvatarError('Please choose an image smaller than 4 MB.');
+      fileInput.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64Data = reader.result;
+      try {
+        setIsUploadingAvatar(true);
+        setAvatarBusyMessage('Uploading photo...');
+        setAvatarError(null);
+        setAvatarMessage(null);
+        const updatedUser = await uploadUserAvatar(currentUser.id, base64Data);
+        setUser(updatedUser);
+        if (onUserUpdate) {
+          onUserUpdate(updatedUser);
+        }
+        setAvatarMessage('Profile photo updated successfully.');
+      } catch (err) {
+        setAvatarError(
+          err?.response?.data?.error || 'Failed to update profile photo. Please try again.'
+        );
+      } finally {
+        setIsUploadingAvatar(false);
+        setAvatarBusyMessage(null);
+        fileInput.value = '';
+      }
+    };
+    reader.onerror = () => {
+      setAvatarError('Could not read selected file.');
+      setAvatarMessage(null);
+      fileInput.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerAvatarUpload = () => {
+    if (isUploadingAvatar) return;
+    setShowAvatarMenu(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleAvatarButtonClick = () => {
+    if (isUploadingAvatar) return;
+    if (user?.avatar_url) {
+      setShowAvatarMenu((prev) => !prev);
+    } else {
+      triggerAvatarUpload();
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!currentUser?.id) return;
+    try {
+      setIsUploadingAvatar(true);
+      setAvatarBusyMessage('Removing photo...');
+      setAvatarError(null);
+      setAvatarMessage(null);
+      const updatedUser = await deleteUserAvatar(currentUser.id);
+      setUser(updatedUser);
+      if (onUserUpdate) {
+        onUserUpdate(updatedUser);
+      }
+      setAvatarMessage('Profile photo removed.');
+    } catch (err) {
+      setAvatarError(
+        err?.response?.data?.error || 'Failed to remove profile photo. Please try again.'
+      );
+    } finally {
+      setIsUploadingAvatar(false);
+      setAvatarBusyMessage(null);
+      setShowAvatarMenu(false);
+    }
+  };
+
+  const avatarSrc = user?.avatar_url ? toAbsoluteUrl(user.avatar_url) : 'https://via.placeholder.com/160?text=Avatar';
+  const displayName = user?.full_name || user?.username || 'Student';
+  const displayEmail = user?.email || 'Not available';
 
   return (
     <div className="profile-page">
@@ -62,6 +225,13 @@ function StudentProfilePage({ complaints = [], showHistory = true }) {
 
         {/* Main content */}
         <div className="profile-main">
+          {isLoadingProfile && (
+            <div className="profile-status">Loading profile...</div>
+          )}
+          {profileError && !isLoadingProfile && (
+            <div className="profile-error">{profileError}</div>
+          )}
+
           {activeTab === 'account' && !showReset && (
             <>
               <h1 className="profile-title">Profile</h1>
@@ -74,12 +244,58 @@ function StudentProfilePage({ complaints = [], showHistory = true }) {
                     alt="avatar"
                     className="avatar-img"
                   />
-                  <label htmlFor="avatar-upload" className="avatar-upload-button">
-                    <svg width="16" height="16" fill="#fff" viewBox="0 0 24 24">
-                      <path d="M12 5.9c-3.37 0-6.1 2.73-6.1 6.1s2.73 6.1 6.1 6.1 6.1-2.73 6.1-6.1-2.73-6.1-6.1-6.1zm0 10.2c-2.26 0-4.1-1.84-4.1-4.1s1.84-4.1 4.1-4.1 4.1 1.84 4.1 4.1-1.84 4.1-4.1 4.1z"/>
-                    </svg>
-                    <input id="avatar-upload" type="file" accept="image/*" style={{ display: "none" }} />
-                  </label>
+                  <div className="avatar-control" ref={avatarMenuRef}>
+                    <button
+                      type="button"
+                      className="avatar-upload-button"
+                      onClick={handleAvatarButtonClick}
+                      disabled={isUploadingAvatar}
+                      aria-haspopup="true"
+                      aria-expanded={showAvatarMenu}
+                      aria-label={user?.avatar_url ? 'Change profile photo' : 'Upload profile photo'}
+                    >
+                      <svg width="16" height="16" fill="#fff" viewBox="0 0 24 24">
+                        <path d="M12 5.9c-3.37 0-6.1 2.73-6.1 6.1s2.73 6.1 6.1 6.1 6.1-2.73 6.1-6.1-2.73-6.1-6.1-6.1zm0 10.2c-2.26 0-4.1-1.84-4.1-4.1s1.84-4.1 4.1-4.1 4.1 1.84 4.1 4.1-1.84 4.1-4.1 4.1z"/>
+                      </svg>
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      id="avatar-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarChange}
+                      style={{ display: "none" }}
+                    />
+                    {showAvatarMenu && user?.avatar_url && (
+                      <div className="avatar-options-menu">
+                        <button
+                          type="button"
+                          onClick={triggerAvatarUpload}
+                          disabled={isUploadingAvatar}
+                        >
+                          Upload Photo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRemoveAvatar}
+                          disabled={isUploadingAvatar}
+                        >
+                          Remove Photo
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="avatar-status-container">
+                  {isUploadingAvatar && (
+                    <p className="avatar-status">{avatarBusyMessage || 'Updating photo...'}</p>
+                  )}
+                  {!isUploadingAvatar && avatarMessage && (
+                    <p className="avatar-status success">{avatarMessage}</p>
+                  )}
+                  {!isUploadingAvatar && avatarError && (
+                    <p className="avatar-status error">{avatarError}</p>
+                  )}
                 </div>
 
                 {/* Info block */}
@@ -88,17 +304,7 @@ function StudentProfilePage({ complaints = [], showHistory = true }) {
                     <span className="info-label">Name</span>
                     <input
                       type="text"
-                      value={user.name}
-                      disabled
-                      className="info-input"
-                    />
-                  </div>
-
-                  <div className="info-row">
-                    <span className="info-label">Student ID</span>
-                    <input
-                      type="text"
-                      value={user.studentId || ''}
+                      value={displayName}
                       disabled
                       className="info-input"
                     />
@@ -108,7 +314,7 @@ function StudentProfilePage({ complaints = [], showHistory = true }) {
                     <span className="info-label">Email</span>
                     <input
                       type="text"
-                      value={user.email}
+                      value={displayEmail}
                       disabled
                       className="info-input"
                     />

@@ -50,6 +50,8 @@ Thumbs.db
 .env.development.local
 .env.test.local
 .env.production.local
+Online_Bullying_System_Backend/.env
+Online_Bullying_System_Backend/.env.*
 
 # Logs
 *.log
@@ -58,6 +60,10 @@ logs/
 # Database
 *.sqlite3
 *.db
+Online_Bullying_System_Backend/instance/
+Online_Bullying_System_Backend/uploads/
+Online_Bullying_System_Backend/*.sqlite
+Online_Bullying_System_Backend/*.db
 
 # Node modules (if you have any frontend dependencies)
 node_modules/
@@ -65,3 +71,6 @@ node_modules/
 # Temporary files
 tmp/
 temp/
+
+# Python cache (per-module just in case)
+Online_Bullying_System_Backend/**/__pycache__/
