@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createComplaint } from '../services/api';
 
-function SubmitComplaint({ onSubmit }) {
+const resolveStudentName = (user) =>
+  user?.full_name || user?.username || user?.email || '';
+
+function SubmitComplaint({ onSubmit, currentUser }) {
+
   const [formData, setFormData] = useState({
-    studentName: '',
-    studentId: '',
+    studentName: resolveStudentName(currentUser),
     roomNumber: '',
     incidentType: '',
     description: '',
@@ -12,40 +16,79 @@ function SubmitComplaint({ onSubmit }) {
     anonymous: false,
     attachments: []
   })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
+  const [submitSuccess, setSubmitSuccess] = useState(null)
+  const attachmentInputRef = useRef(null)
+  const handleAttachmentTrigger = () => {
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.click()
+    }
+  }
+
+  useEffect(() => {
+    setFormData(prev => {
+      if (prev.anonymous) return prev;
+      return {
+        ...prev,
+        studentName: resolveStudentName(currentUser),
+      };
+    });
+  }, [currentUser]);
 
   const handleChange = (e) => {
     const { name, value, type, checked, files } = e.target
     if (type === 'file') {
-      setFormData(prev => ({
-        ...prev,
-        attachments: [
-          ...prev.attachments,
-          ...Array.from(files).filter(
-            file => !prev.attachments.some(f => f.name === file.name && f.size === file.size)
-          )
-        ]
-      }))
+      const selectedFiles = Array.from(files)
+      setFormData(prev => {
+        const deduped = selectedFiles.filter(
+          file =>
+            !prev.attachments.some(
+              f =>
+                f.name === file.name &&
+                f.size === file.size &&
+                f.lastModified === file.lastModified
+            )
+        )
+        return {
+          ...prev,
+          attachments: [...prev.attachments, ...deduped]
+        }
+      })
+      if (attachmentInputRef.current) {
+        attachmentInputRef.current.value = ''
+      }
     } else {
       setFormData(prev => ({
         ...prev,
-        [name]: type === 'checkbox' ? checked : value
+        ...(name === 'anonymous'
+          ? {
+              anonymous: checked,
+              studentName: checked ? '' : resolveStudentName(currentUser),
+            }
+          : name === 'studentName'
+          ? prev
+          : { [name]: type === 'checkbox' ? checked : value })
       }))
     }
   }
 
   const handleRemoveAttachment = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      attachments: prev.attachments.filter((_, i) => i !== index)
-    }))
+    setFormData(prev => {
+      const updated = prev.attachments.filter((_, i) => i !== index)
+      if (updated.length === 0 && attachmentInputRef.current) {
+        attachmentInputRef.current.value = ''
+      }
+      return {
+        ...prev,
+        attachments: updated
+      }
+    })
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    onSubmit(formData)
+  const resetForm = () => {
     setFormData({
-      studentName: '',
-      studentId: '',
+      studentName: resolveStudentName(currentUser),
       roomNumber: '',
       incidentType: '',
       description: '',
@@ -54,7 +97,50 @@ function SubmitComplaint({ onSubmit }) {
       anonymous: false,
       attachments: []
     })
-    alert('Complaint submitted successfully!')
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = ''
+    }
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (isSubmitting) return
+    setSubmitError(null)
+    setSubmitSuccess(null)
+    setIsSubmitting(true)
+
+    const payload = {
+      user_id: currentUser?.id || null,
+      student_name: formData.anonymous ? null : formData.studentName,
+      anonymous: formData.anonymous,
+      incident_type: formData.incidentType,
+      incident_date: formData.incidentDate,
+      description: formData.description,
+      room_number: formData.roomNumber,
+      witnesses: formData.witnesses,
+      attachments: formData.attachments.map(file => ({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      })),
+    }
+
+    try {
+      const created = await createComplaint(payload)
+      if (onSubmit) {
+        onSubmit(created)
+      }
+      resetForm()
+      setSubmitSuccess('Complaint submitted successfully.')
+    } catch (err) {
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        'Unable to submit complaint. Please try again.'
+      setSubmitError(message)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -63,6 +149,8 @@ function SubmitComplaint({ onSubmit }) {
       <p className="form-intro">
         Please provide as much detail as possible. All information is kept confidential.
       </p>
+      {submitError && <div className="form-error">{submitError}</div>}
+      {submitSuccess && <div className="form-success">{submitSuccess}</div>}
 
       <form onSubmit={handleSubmit} className="complaint-form">
         <div className="form-group switch-group">
@@ -90,19 +178,7 @@ function SubmitComplaint({ onSubmit }) {
             value={formData.studentName}
             onChange={handleChange}
             required={!formData.anonymous}
-            disabled={formData.anonymous}
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="studentId">Student ID:</label>
-          <input
-            type="text"
-            id="studentId"
-            name="studentId"
-            value={formData.studentId}
-            onChange={handleChange}
-            required={!formData.anonymous}
+            readOnly={!formData.anonymous}
             disabled={formData.anonymous}
           />
         </div>
@@ -182,26 +258,31 @@ function SubmitComplaint({ onSubmit }) {
             id="attachment"
             name="attachment"
             multiple
+            ref={attachmentInputRef}
             onChange={handleChange}
-            style={{ display: 'block' }}
+            style={{ display: 'none' }}
           />
+          <button
+            type="button"
+            className="attachment-trigger-btn"
+            onClick={handleAttachmentTrigger}
+          >
+            Choose Files
+          </button>
+          <span className="attachment-summary">
+            {formData.attachments.length === 0
+              ? 'No files selected'
+              : `${formData.attachments.length} file${formData.attachments.length > 1 ? 's' : ''} attached`}
+          </span>
           {formData.attachments.length > 0 && (
-            <ul style={{ marginTop: '0.5rem', paddingLeft: '1rem' }}>
+            <ul className="attachment-list">
               {formData.attachments.map((file, idx) => (
-                <li key={idx} style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ marginRight: 8 }}>{file.name}</span>
+                <li key={idx} className="attachment-list-item">
+                  <span className="attachment-file-name">{file.name}</span>
                   <button
                     type="button"
                     onClick={() => handleRemoveAttachment(idx)}
-                    style={{
-                      background: '#e74c3c',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '3px',
-                      padding: '2px 8px',
-                      cursor: 'pointer',
-                      fontSize: '0.9em'
-                    }}
+                    className="attachment-remove-btn"
                   >
                     Delete
                   </button>
@@ -211,8 +292,8 @@ function SubmitComplaint({ onSubmit }) {
           )}
         </div>
 
-        <button type="submit" className="submit-btn">
-          Submit Complaint
+        <button type="submit" className="submit-btn" disabled={isSubmitting}>
+          {isSubmitting ? 'Submitting...' : 'Submit Complaint'}
         </button>
       </form>
     </div>

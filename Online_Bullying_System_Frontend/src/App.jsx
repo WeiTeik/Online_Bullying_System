@@ -7,15 +7,36 @@ import { ComplaintStatus } from './components/CheckStatus';
 import { Resources } from './components/Resources';
 import StudentProfilePage from './components/StudentProfilePage';
 import AdminDashboard from './components/admin/AdminDashboard';
-import { login as loginRequest, toAbsoluteUrl } from './services/api';
+import { login as loginRequest, toAbsoluteUrl, getComplaints, addComplaintComment } from './services/api';
 import './App.css';
+
+const LOCAL_STORAGE_USER_KEY = 'obs.currentUser';
+
+const loadStoredUser = () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const raw = window.localStorage.getItem(LOCAL_STORAGE_USER_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn('Detected invalid stored user data, clearing persisted session.', error);
+    window.localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
+    return null;
+  }
+};
 
 function App() {
   const [complaints, setComplaints] = useState([])
+  const [isComplaintsLoading, setIsComplaintsLoading] = useState(false)
+  const [complaintsError, setComplaintsError] = useState(null)
   const [showLogin, setShowLogin] = useState(false)
   const [authError, setAuthError] = useState(null)
   const [isAuthLoading, setIsAuthLoading] = useState(false)
-  const [currentUser, setCurrentUser] = useState(null)
+  const [currentUser, setCurrentUser] = useState(() => loadStoredUser())
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [pendingRoute, setPendingRoute] = useState(null)
 
@@ -30,15 +51,21 @@ function App() {
   }
 
   const handleSubmitComplaint = (complaint) => {
-    const newComplaint = {
-      id: Date.now(),
-      ...complaint,
-      status: 'pending',
-      submittedAt: new Date().toLocaleDateString()
-    }
-    setComplaints([...complaints, newComplaint])
+    if (!complaint) return
+    setComplaints(prev => [complaint, ...prev])
     navigate('/status')
   }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (currentUser) {
+      window.localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(currentUser));
+    } else {
+      window.localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
+    }
+  }, [currentUser]);
 
   const handleLogin = async (identifier, password) => {
     const trimmedIdentifier = identifier.trim()
@@ -84,6 +111,9 @@ function App() {
     setCurrentUser(null)
     setShowUserMenu(false)
     setPendingRoute(null)
+    setComplaints([])
+    setComplaintsError(null)
+    setIsComplaintsLoading(false)
     navigate('/home')
   }
 
@@ -91,6 +121,66 @@ function App() {
     setShowUserMenu(false)
     navigate('/profile')
   }
+
+  const handleAddComment = async (complaintId, message) => {
+    if (!currentUser) {
+      throw new Error('You must be logged in to comment.')
+    }
+    const comment = await addComplaintComment(complaintId, {
+      author_id: currentUser.id,
+      message,
+    })
+    setComplaints(prev =>
+      prev.map(complaint =>
+        complaint.id === complaintId
+          ? {
+              ...complaint,
+              comments: [...(complaint.comments || []), comment],
+            }
+          : complaint
+      )
+    )
+    return comment
+  }
+  useEffect(() => {
+    if (!currentUser) {
+      setComplaints([])
+      setComplaintsError(null)
+      setIsComplaintsLoading(false)
+      return
+    }
+    let isActive = true
+    const fetchComplaints = async () => {
+      setIsComplaintsLoading(true)
+      setComplaintsError(null)
+      try {
+        const params = { include_comments: true }
+        if ((currentUser.role || '').toUpperCase() === 'STUDENT') {
+          params.user_id = currentUser.id
+        }
+        const data = await getComplaints(params)
+        if (isActive) {
+          setComplaints(data)
+        }
+      } catch (err) {
+        if (isActive) {
+          const message =
+            err?.response?.data?.error ||
+            err?.message ||
+            'Unable to load complaints.'
+          setComplaintsError(message)
+        }
+      } finally {
+        if (isActive) {
+          setIsComplaintsLoading(false)
+        }
+      }
+    }
+    fetchComplaints()
+    return () => {
+      isActive = false
+    }
+  }, [currentUser])
 
   const handleProtectedNav = (event, path) => {
     if (!currentUser) {
@@ -196,8 +286,27 @@ function App() {
       <main className="main-content">
         <Routes>
           <Route path="/home" element={<HomePage />} />
-          <Route path="/submit" element={<SubmitComplaint onSubmit={handleSubmitComplaint} />} />
-          <Route path="/status" element={<ComplaintStatus complaints={complaints} />} />
+          <Route
+            path="/submit"
+            element={
+              <SubmitComplaint
+                onSubmit={handleSubmitComplaint}
+                currentUser={currentUser}
+              />
+            }
+          />
+          <Route
+            path="/status"
+            element={
+              <ComplaintStatus
+                complaints={complaints}
+                loading={isComplaintsLoading}
+                error={complaintsError}
+                onAddComment={handleAddComment}
+                currentUser={currentUser}
+              />
+            }
+          />
           <Route path="/resources" element={<Resources />} />
           <Route
             path="/profile"

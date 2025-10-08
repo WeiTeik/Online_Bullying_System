@@ -64,6 +64,32 @@ export async function deleteUserAvatar(id) {
   return res.data;
 }
 
+// Complaints
+export async function createComplaint(payload) {
+  const res = await api.post("/complaints", payload);
+  return res.data;
+}
+
+export async function getComplaints(params = {}) {
+  const res = await api.get("/complaints", { params });
+  return res.data;
+}
+
+export async function addComplaintComment(complaintId, payload) {
+  const res = await api.post(`/complaints/${complaintId}/comments`, payload);
+  return res.data;
+}
+
+export async function getComplaintById(id) {
+  const res = await api.get(`/complaints/${id}`);
+  return res.data;
+}
+
+export async function getComplaintComments(complaintId) {
+  const res = await api.get(`/complaints/${complaintId}/comments`);
+  return res.data;
+}
+
 export function toAbsoluteUrl(path) {
   if (!path) return path;
   if (/^https?:\/\//i.test(path)) return path;
