@@ -4,6 +4,16 @@ import { getUser, uploadUserAvatar, deleteUserAvatar, changeUserPassword, toAbso
 
 const MAX_AVATAR_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB
 
+const formatDateTime = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+};
+
 function StudentProfilePage({ complaints = [], showHistory = true, currentUser, onUserUpdate }) {
   const [activeTab, setActiveTab] = useState('account');
   const [showReset, setShowReset] = useState(false);
@@ -421,14 +431,27 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
                 <div className="no-complaints">No complaints submitted yet.</div>
               ) : (
                 <ul className="history-list">
-                  {complaints.map((c) => (
-                    <li key={c.id} className="history-item">
-                      <div className="history-field"><strong>Title:</strong> {c.title || 'No Title'}</div>
-                      <div className="history-field"><strong>Status:</strong> {c.status}</div>
-                      <div className="history-field"><strong>Date:</strong> {c.submittedAt}</div>
-                      <div className="history-field" style={{ whiteSpace: "pre-wrap" }}><strong>Description:</strong> {c.description}</div>
-                    </li>
-                  ))}
+                  {complaints.map((c) => {
+                    const submittedAt = c.submitted_at || c.submittedAt;
+                    return (
+                      <li key={c.id} className="history-item">
+                        <div className="history-content">
+                          <div className="history-field"><strong>Status:</strong> {c.status}</div>
+                          <div className="history-field"><strong>Date:</strong> {formatDateTime(submittedAt)}</div>
+                          <div className="history-field history-description"><strong>Description:</strong> {c.description}</div>
+                        </div>
+                        <div className="history-actions">
+                          <button
+                            type="button"
+                            className="history-view-button"
+                            onClick={() => navigate('/status', { state: { complaintId: c.id } })}
+                          >
+                            View
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

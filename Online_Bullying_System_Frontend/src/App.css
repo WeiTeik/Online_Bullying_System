@@ -883,6 +883,42 @@ input:checked + .slider:before {
   font-size: 0.9em;
 }
 
+.attachment-trigger-btn {
+  display: inline-block;
+  padding: 0.65rem 1.2rem;
+  background: #667eea;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  margin-right: 12px;
+  transition: background 0.2s;
+}
+
+.attachment-trigger-btn:hover,
+.attachment-trigger-btn:focus {
+  background: #5466d8;
+  outline: none;
+}
+
+.attachment-summary {
+  font-size: 0.95rem;
+  color: #555;
+}
+
+.form-error {
+  margin-bottom: 1rem;
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.form-success {
+  margin-bottom: 1rem;
+  color: #2d7d46;
+  font-weight: 600;
+}
+
 /* Submit Complain Styles end */
 
 /* Complaint Status Styles */
@@ -917,6 +953,13 @@ input:checked + .slider:before {
   background: #f8f9fa;
 }
 
+.complaint-card.is-highlighted {
+  border-color: #4c6ef5;
+  box-shadow: 0 0 0 3px rgba(76, 110, 245, 0.2);
+  background: #eef3ff;
+  transition: box-shadow 0.3s ease, background 0.3s ease;
+}
+
 .complaint-header {
   display: flex;
   justify-content: space-between;
@@ -929,17 +972,34 @@ input:checked + .slider:before {
   margin: 0;
 }
 
+.complaint-subtitle {
+  margin: 4px 0 0;
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
 .status {
   padding: 0.3rem 0.8rem;
   border-radius: 20px;
   font-size: 0.8rem;
   font-weight: 600;
   text-transform: uppercase;
+  align-self: flex-start;
 }
 
 .status.pending {
   background: #fff3cd;
   color: #856404;
+}
+
+.status.new {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status.in_progress {
+  background: #cce5ff;
+  color: #004085;
 }
 
 .status.investigating {
@@ -952,9 +1012,181 @@ input:checked + .slider:before {
   color: #155724;
 }
 
+.status.rejected {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.status-notice {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.status-notice--new {
+  background: #fff5d9;
+  border: 1px solid #ffe8ac;
+  color: #8a6d1c;
+}
+
+.status-notice--in_progress {
+  background: #e7f1ff;
+  border: 1px solid #c2dcff;
+  color: #0b48a8;
+}
+
+.status-notice--resolved {
+  background: #e3f7ea;
+  border: 1px solid #c2e7cf;
+  color: #196232;
+}
+
+.status-notice--rejected {
+  background: #fbe5e7;
+  border: 1px solid #f1b7bd;
+  color: #8b1c29;
+}
+
 .complaint-details p {
   margin: 0.5rem 0;
   color: #495057;
+}
+
+.complaint-description {
+  margin-top: 0.5rem;
+  white-space: pre-line;
+}
+
+.complaint-attachments {
+  margin-top: 0.75rem;
+}
+
+.complaint-attachments ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.toggle-comments-btn {
+  margin-top: 1rem;
+  background: transparent;
+  border: 1px solid #667eea;
+  color: #667eea;
+  border-radius: 6px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s, color 0.2s;
+}
+
+.toggle-comments-btn:hover,
+.toggle-comments-btn:focus {
+  background: #667eea;
+  color: #fff;
+  outline: none;
+}
+
+.complaint-comments {
+  margin-top: 1rem;
+  border-top: 1px solid #e5e8f0;
+  padding-top: 1rem;
+}
+
+.complaint-comments h4 {
+  margin-bottom: 0.6rem;
+  color: #2c3e50;
+}
+
+.no-comments {
+  color: #7f8c8d;
+  margin: 0.4rem 0 1rem;
+}
+
+.comment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.comment-item {
+  background: #f4f6ff;
+  border-radius: 8px;
+  padding: 0.75rem;
+  border: 1px solid #dfe4fc;
+}
+
+.comment-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.comment-author {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.comment-role {
+  color: #7f8c8d;
+  font-weight: 500;
+}
+
+.comment-date {
+  color: #95a5a6;
+  font-size: 0.8rem;
+}
+
+.comment-message {
+  margin: 0;
+  color: #34495e;
+  white-space: pre-line;
+}
+
+.comment-form {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.comment-form textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #cbd2ff;
+  resize: vertical;
+  font-size: 0.95rem;
+  min-height: 80px;
+}
+
+.comment-form button {
+  align-self: flex-end;
+  background: #667eea;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.45rem 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.comment-form button:hover,
+.comment-form button:focus {
+  background: #5466d8;
+  outline: none;
+}
+
+.comment-error {
+  color: #c0392b;
+  font-size: 0.9rem;
+  margin: 0;
 }
 
 /* Resources Styles */
@@ -1343,11 +1575,19 @@ input:checked + .slider:before {
 }
 
 .history-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
   background: #fafafa;
   margin-bottom: 14px;
   padding: 14px;
   border-radius: 8px;
   border: 1px solid #f0f0f0;
+}
+
+.history-content {
+  flex: 1 1 240px;
 }
 
 .history-field {
@@ -1358,6 +1598,39 @@ input:checked + .slider:before {
 .history-field pre,
 .history-field .description {
   white-space: pre-wrap;
+}
+
+.history-description {
+  white-space: pre-wrap;
+  margin-bottom: 0;
+}
+
+.history-actions {
+  margin-top: 0;
+  display: flex;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.history-view-button {
+  background: #4c6ef5;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.history-view-button:hover {
+  background: #3b5bdb;
+  transform: translateY(-1px);
+}
+
+.history-view-button:focus {
+  outline: 2px solid #3b5bdb;
+  outline-offset: 2px;
 }
 /* Profile Page Styles end */
 

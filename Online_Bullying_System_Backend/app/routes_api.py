@@ -6,6 +6,15 @@ from flask import Blueprint, jsonify, request, current_app, send_from_directory
 from werkzeug.utils import secure_filename
 from app.models import User, db
 from app.crud.user import get_all_users, get_user_by_id, create_user, update_user, delete_user
+from app.crud.complaint import (
+    create_complaint,
+    get_complaints_for_user,
+    get_all_complaints,
+    add_comment,
+    get_complaint_by_id,
+    get_comments,
+    update_complaint_status,
+)
 
 api_bp = Blueprint("api", __name__)
 
@@ -46,6 +55,76 @@ def api_delete_user(user_id):
     if not ok:
         return jsonify({"error": "User not found"}), 404
     return jsonify({"success": True}), 200
+
+
+@api_bp.route("/complaints", methods=["GET"])
+def api_get_complaints():
+    user_id = request.args.get("user_id", type=int)
+    include_comments = request.args.get("include_comments", "false").lower() == "true"
+    if user_id:
+        complaints = get_complaints_for_user(user_id, include_comments=include_comments)
+    else:
+        complaints = get_all_complaints(include_comments=include_comments)
+    return jsonify(complaints), 200
+
+
+@api_bp.route("/complaints/<int:complaint_id>", methods=["GET"])
+def api_get_complaint(complaint_id):
+    complaint = get_complaint_by_id(complaint_id, include_comments=True)
+    if not complaint:
+        return jsonify({"error": "Complaint not found"}), 404
+    return jsonify(complaint), 200
+
+
+@api_bp.route("/complaints", methods=["POST"])
+def api_create_complaint():
+    data = request.get_json() or {}
+    try:
+        complaint = create_complaint(data)
+    except Exception as exc:  # broad but ensures we return json
+        current_app.logger.exception("Failed to create complaint: %s", exc)
+        return jsonify({"error": "Unable to create complaint"}), 400
+    return jsonify(complaint.to_dict(include_comments=True)), 201
+
+
+@api_bp.route("/complaints/<int:complaint_id>/comments", methods=["GET"])
+def api_get_complaint_comments(complaint_id):
+    complaint = get_complaint_by_id(complaint_id)
+    if not complaint:
+        return jsonify({"error": "Complaint not found"}), 404
+    comments = get_comments(complaint_id)
+    return jsonify(comments), 200
+
+
+@api_bp.route("/complaints/<int:complaint_id>/comments", methods=["POST"])
+def api_add_comment(complaint_id):
+    data = request.get_json() or {}
+    message = (data.get("message") or "").strip()
+    if not message:
+        return jsonify({"error": "Comment message is required."}), 400
+    comment = add_comment(
+        complaint_id=complaint_id,
+        author_id=data.get("author_id"),
+        message=message,
+    )
+    if comment is None:
+        return jsonify({"error": "Complaint not found"}), 404
+    return jsonify(comment.to_dict()), 201
+
+
+@api_bp.route("/complaints/<int:complaint_id>/status", methods=["PATCH"])
+def api_update_complaint_status(complaint_id):
+    data = request.get_json() or {}
+    status_value = data.get("status")
+    if not status_value:
+        return jsonify({"error": "Status value is required."}), 400
+    try:
+        complaint = update_complaint_status(complaint_id, status_value)
+    except ValueError:
+        return jsonify({"error": "Invalid status value."}), 400
+    if complaint is None:
+        return jsonify({"error": "Complaint not found"}), 404
+    return jsonify(complaint.to_dict(include_comments=True)), 200
 
 
 @api_bp.route("/users/<int:user_id>/password", methods=["POST"])
