@@ -14,7 +14,7 @@ const formatDateTime = (value) => {
   });
 };
 
-function StudentProfilePage({ complaints = [], showHistory = true, currentUser, onUserUpdate }) {
+function StudentProfilePage({ complaints = [], showHistory = true, currentUser, onUserUpdate, onLogout }) {
   const [activeTab, setActiveTab] = useState('account');
   const [showReset, setShowReset] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
@@ -31,6 +31,7 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [avatarBusyMessage, setAvatarBusyMessage] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
   const fileInputRef = useRef(null);
   const avatarMenuRef = useRef(null);
   const navigate = useNavigate();
@@ -97,6 +98,53 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
       setIsResetting(false);
     }
   }, [showReset]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+    const mql = window.matchMedia('(max-width: 768px)');
+    const handleChange = (event) => {
+      setIsMobile(event.matches);
+    };
+    // set initial state
+    setIsMobile(mql.matches);
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', handleChange);
+      return () => mql.removeEventListener('change', handleChange);
+    }
+    if (typeof mql.addListener === 'function') {
+      mql.addListener(handleChange);
+      return () => mql.removeListener(handleChange);
+    }
+    return undefined;
+  }, []);
+
+  const handleNavigation = (target) => {
+    if (target === 'account') {
+      setActiveTab('account');
+      setShowReset(false);
+      return;
+    }
+    if (target === 'reset') {
+      setActiveTab('account');
+      setShowReset(true);
+      return;
+    }
+    if (target === 'history') {
+      setActiveTab('history');
+      setShowReset(false);
+    }
+  };
+
+  const isAccountView = activeTab === 'account' && !showReset;
+  const isResetView = activeTab === 'account' && showReset;
+  const isHistoryView = activeTab === 'history';
+  const handleMobileLogout = () => {
+    if (typeof onLogout === 'function') {
+      onLogout();
+    }
+  };
 
   const handleReset = async (e) => {
     e.preventDefault();
@@ -239,33 +287,65 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
     }
   };
 
-  const avatarSrc = user?.avatar_url ? toAbsoluteUrl(user.avatar_url) : 'https://via.placeholder.com/160?text=Avatar';
+  const avatarSrc = user?.avatar_url ? toAbsoluteUrl(user.avatar_url) : null;
   const displayName = user?.full_name || user?.username || 'Student';
   const displayEmail = user?.email || 'Not available';
+  const avatarLabelSource = (displayName || displayEmail || '').trim() || 'User';
+  const avatarInitial = avatarLabelSource.charAt(0).toUpperCase();
 
   return (
     <div className="profile-page">
+      {isMobile && (
+        <div className="profile-tabs-mobile" role="tablist" aria-label="Profile sections">
+          <button
+            type="button"
+            className={`profile-tabs-mobile__button${isAccountView ? ' is-active' : ''}`}
+            onClick={() => handleNavigation('account')}
+            aria-pressed={isAccountView}
+          >
+            Account
+          </button>
+          <button
+            type="button"
+            className={`profile-tabs-mobile__button${isResetView ? ' is-active' : ''}`}
+            onClick={() => handleNavigation('reset')}
+            aria-pressed={isResetView}
+          >
+            Reset Password
+          </button>
+          {showHistory && (
+            <button
+              type="button"
+              className={`profile-tabs-mobile__button${isHistoryView ? ' is-active' : ''}`}
+              onClick={() => handleNavigation('history')}
+              aria-pressed={isHistoryView}
+            >
+              History
+            </button>
+          )}
+        </div>
+      )}
       <div className="profile-card">
         {/* Sidebar */}
-        <div className="profile-sidebar">
+        <div className={`profile-sidebar${isMobile ? ' is-hidden-mobile' : ''}`}>
           <div
-            onClick={() => { setActiveTab('account'); setShowReset(false); }}
-            className={`sidebar-item ${activeTab === 'account' && !showReset ? 'active' : ''}`}
+            onClick={() => handleNavigation('account')}
+            className={`sidebar-item ${isAccountView ? 'active' : ''}`}
           >
             My Account
           </div>
 
           <div
-            onClick={() => { setActiveTab('account'); setShowReset(true); }}
-            className={`sidebar-subitem ${showReset ? 'active' : ''}`}
+            onClick={() => handleNavigation('reset')}
+            className={`sidebar-subitem ${isResetView ? 'active' : ''}`}
           >
             Reset Password
           </div>
 
           {showHistory && (
             <div
-              onClick={() => { setActiveTab('history'); setShowReset(false); }}
-              className={`sidebar-item history ${activeTab === 'history' ? 'active' : ''}`}
+              onClick={() => handleNavigation('history')}
+              className={`sidebar-item history ${isHistoryView ? 'active' : ''}`}
             >
               History Complaint
             </div>
@@ -281,100 +361,108 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
             <div className="profile-error">{profileError}</div>
           )}
 
-          {activeTab === 'account' && !showReset && (
+          {isAccountView && (
             <>
               <h1 className="profile-title">Profile</h1>
 
-              <div className="profile-top">
-                {/* Avatar */}
-                <div className="avatar-wrapper">
-                  <img
-                    src={avatarSrc}
-                    alt="avatar"
-                    className="avatar-img"
-                  />
-                  <div className="avatar-control" ref={avatarMenuRef}>
-                    <button
-                      type="button"
-                      className="avatar-upload-button"
-                      onClick={handleAvatarButtonClick}
-                      disabled={isUploadingAvatar}
-                      aria-haspopup="true"
-                      aria-expanded={showAvatarMenu}
-                      aria-label={user?.avatar_url ? 'Change profile photo' : 'Upload profile photo'}
-                    >
-                      <svg width="16" height="16" fill="#fff" viewBox="0 0 24 24">
-                        <path d="M12 5.9c-3.37 0-6.1 2.73-6.1 6.1s2.73 6.1 6.1 6.1 6.1-2.73 6.1-6.1-2.73-6.1-6.1-6.1zm0 10.2c-2.26 0-4.1-1.84-4.1-4.1s1.84-4.1 4.1-4.1 4.1 1.84 4.1 4.1-1.84 4.1-4.1 4.1z"/>
-                      </svg>
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      id="avatar-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarChange}
-                      style={{ display: "none" }}
-                    />
-                    {showAvatarMenu && user?.avatar_url && (
-                      <div className="avatar-options-menu">
-                        <button
-                          type="button"
-                          onClick={triggerAvatarUpload}
-                          disabled={isUploadingAvatar}
-                        >
-                          Upload Photo
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleRemoveAvatar}
-                          disabled={isUploadingAvatar}
-                        >
-                          Remove Photo
-                        </button>
+              <div className="profile-section-card">
+                <div className="profile-top">
+                  {/* Avatar */}
+                  <div className="avatar-wrapper">
+                    {avatarSrc ? (
+                      <img
+                        src={avatarSrc}
+                        alt="avatar"
+                        className="avatar-img"
+                      />
+                    ) : (
+                      <div className="avatar-fallback" aria-hidden="true">
+                        {avatarInitial}
                       </div>
                     )}
+                    <div className="avatar-control" ref={avatarMenuRef}>
+                      <button
+                        type="button"
+                        className="avatar-upload-button"
+                        onClick={handleAvatarButtonClick}
+                        disabled={isUploadingAvatar}
+                        aria-haspopup="true"
+                        aria-expanded={showAvatarMenu}
+                        aria-label={user?.avatar_url ? 'Change profile photo' : 'Upload profile photo'}
+                      >
+                        <svg width="16" height="16" fill="#fff" viewBox="0 0 24 24">
+                          <path d="M12 5.9c-3.37 0-6.1 2.73-6.1 6.1s2.73 6.1 6.1 6.1 6.1-2.73 6.1-6.1-2.73-6.1-6.1-6.1zm0 10.2c-2.26 0-4.1-1.84-4.1-4.1s1.84-4.1 4.1-4.1 4.1 1.84 4.1 4.1-1.84 4.1-4.1 4.1z"/>
+                        </svg>
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        id="avatar-upload"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarChange}
+                        style={{ display: "none" }}
+                      />
+                      {showAvatarMenu && user?.avatar_url && (
+                        <div className="avatar-options-menu">
+                          <button
+                            type="button"
+                            onClick={triggerAvatarUpload}
+                            disabled={isUploadingAvatar}
+                          >
+                            Upload Photo
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleRemoveAvatar}
+                            disabled={isUploadingAvatar}
+                          >
+                            Remove Photo
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="avatar-status-container">
-                  {isUploadingAvatar && (
-                    <p className="avatar-status">{avatarBusyMessage || 'Updating photo...'}</p>
-                  )}
-                  {!isUploadingAvatar && avatarMessage && (
-                    <p className="avatar-status success">{avatarMessage}</p>
-                  )}
-                  {!isUploadingAvatar && avatarError && (
-                    <p className="avatar-status error">{avatarError}</p>
-                  )}
-                </div>
-
-                {/* Info block */}
-                <div className="info-block">
-                  <div className="info-row">
-                    <span className="info-label">Name</span>
-                    <input
-                      type="text"
-                      value={displayName}
-                      disabled
-                      className="info-input"
-                    />
+                  <div className="avatar-status-container">
+                    {isUploadingAvatar && (
+                      <p className="avatar-status">{avatarBusyMessage || 'Updating photo...'}</p>
+                    )}
+                    {!isUploadingAvatar && avatarMessage && (
+                      <p className="avatar-status success">{avatarMessage}</p>
+                    )}
+                    {!isUploadingAvatar && avatarError && (
+                      <p className="avatar-status error">{avatarError}</p>
+                    )}
                   </div>
 
-                  <div className="info-row">
-                    <span className="info-label">Email</span>
-                    <input
-                      type="text"
-                      value={displayEmail}
-                      disabled
-                      className="info-input"
-                    />
+                  {/* Info block */}
+                  <div className="info-block">
+                    <div className="info-row">
+                      <span className="info-label">Name</span>
+                      <input
+                        type="text"
+                        value={displayName}
+                        disabled
+                        className="info-input"
+                      />
+                    </div>
+
+                    <div className="info-row">
+                      <span className="info-label">Email</span>
+                      <input
+                        type="text"
+                        value={displayEmail}
+                        disabled
+                        className="info-input"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
             </>
           )}
 
-          {activeTab === 'account' && showReset && (
-            <div className="reset-container">
+          {isResetView && (
+            <div className="reset-container profile-section-card">
               <h2 className="reset-title">Reset Password</h2>
               <form onSubmit={handleReset}>
                 <div className="form-group">
@@ -424,8 +512,8 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
             </div>
           )}
 
-          {showHistory && activeTab === 'history' && (
-            <div className="history-container">
+          {showHistory && isHistoryView && (
+            <div className="history-container profile-section-card">
               <h2 className="history-title">History Complaint</h2>
               {complaints.length === 0 ? (
                 <div className="no-complaints">No complaints submitted yet.</div>
@@ -455,6 +543,16 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
                 </ul>
               )}
             </div>
+          )}
+
+          {isMobile && typeof onLogout === 'function' && (
+            <button
+              type="button"
+              className="profile-mobile-logout"
+              onClick={handleMobileLogout}
+            >
+              Logout
+            </button>
           )}
         </div>
       </div>

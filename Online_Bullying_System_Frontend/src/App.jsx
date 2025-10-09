@@ -39,6 +39,8 @@ function App() {
   const [currentUser, setCurrentUser] = useState(() => loadStoredUser())
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [pendingRoute, setPendingRoute] = useState(null)
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const [isMobileView, setIsMobileView] = useState(false)
 
   // Add this inside App to get the current route
   const location = useLocation();
@@ -98,6 +100,8 @@ function App() {
   const handleOpenLogin = () => {
     setAuthError(null)
     setPendingRoute(null)
+    setIsMobileNavOpen(false)
+    setShowUserMenu(false)
     setShowLogin(true)
   }
 
@@ -114,11 +118,13 @@ function App() {
     setComplaints([])
     setComplaintsError(null)
     setIsComplaintsLoading(false)
+    setIsMobileNavOpen(false)
     navigate('/home')
   }
 
   const handleViewProfile = () => {
     setShowUserMenu(false)
+    setIsMobileNavOpen(false)
     navigate('/profile')
   }
 
@@ -189,7 +195,20 @@ function App() {
       setAuthError(null)
       setShowLogin(true)
       setShowUserMenu(false)
+    } else {
+      setIsMobileNavOpen(false)
+      setShowUserMenu(false)
     }
+  }
+
+  const handleUserButtonClick = () => {
+    if (isMobileView) {
+      setIsMobileNavOpen(false)
+      setShowUserMenu(false)
+      navigate('/profile')
+      return
+    }
+    setShowUserMenu((prev) => !prev)
   }
 
   useEffect(() => {
@@ -203,21 +222,74 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showUserMenu])
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined
+    }
+    const mql = window.matchMedia('(max-width: 768px)')
+    const handleChange = (event) => {
+      setIsMobileView(event.matches)
+    }
+    setIsMobileView(mql.matches)
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', handleChange)
+      return () => mql.removeEventListener('change', handleChange)
+    }
+    if (typeof mql.addListener === 'function') {
+      mql.addListener(handleChange)
+      return () => mql.removeListener(handleChange)
+    }
+    return undefined
+  }, [])
+
+  useEffect(() => {
+    if (isMobileView) {
+      setShowUserMenu(false)
+      userMenuRef.current = null
+    }
+  }, [isMobileView])
+
+  useEffect(() => {
+    setIsMobileNavOpen(false)
+    setShowUserMenu(false)
+  }, [location.pathname])
+
+  const isAdminRoute = location.pathname.startsWith('/admin');
+
   const avatarInitial = (currentUser?.username || currentUser?.email || 'U')
     .charAt(0)
     .toUpperCase()
   const avatarLabel = currentUser?.username || currentUser?.email || 'User'
   const avatarUrl = currentUser?.avatar_url ? toAbsoluteUrl(currentUser.avatar_url) : null
-  
+
   return (
     <div className="App">
-      {/* Hide header if on /login or /admin route */}
-      {location.pathname !== '/login' && !location.pathname.startsWith('/admin') && (
-        <header className="header">
+      {!isAdminRoute && (
+        <header className={`header${isMobileNavOpen ? ' header--mobile-open' : ''}`}>
           <div className="header-container">
             <h1 className="logo">YouMatter</h1>
-            <nav className="nav">
-              <Link className="nav-link" to="/home">Home</Link>
+            <button
+              type="button"
+              className={`mobile-nav-toggle${isMobileNavOpen ? ' is-open' : ''}`}
+              onClick={() => setIsMobileNavOpen((prev) => !prev)}
+              aria-label="Toggle navigation"
+              aria-expanded={isMobileNavOpen}
+            >
+              <span className="mobile-nav-toggle__bar" />
+              <span className="mobile-nav-toggle__bar" />
+              <span className="mobile-nav-toggle__bar" />
+            </button>
+            <nav className={`nav${isMobileNavOpen ? ' nav--open' : ''}`}>
+              <Link
+                className="nav-link"
+                to="/home"
+                onClick={() => {
+                  setIsMobileNavOpen(false)
+                  setShowUserMenu(false)
+                }}
+              >
+                Home
+              </Link>
               <Link
                 className="nav-link"
                 to="/submit"
@@ -234,16 +306,29 @@ function App() {
               >
                 Check Status
               </Link>
-              <Link className="nav-link" to="/resources">Resources</Link>
+              <Link
+                className="nav-link"
+                to="/resources"
+                onClick={() => {
+                  setIsMobileNavOpen(false)
+                  setShowUserMenu(false)
+                }}
+              >
+                Resources
+              </Link>
               {currentUser ? (
-                <div className="user-menu" ref={userMenuRef}>
+                <div className="user-menu" ref={isMobileView ? undefined : userMenuRef}>
                   <button
                     type="button"
                     className="user-avatar-btn"
-                    onClick={() => setShowUserMenu((prev) => !prev)}
-                    aria-haspopup="true"
-                    aria-expanded={showUserMenu}
-                    aria-label={`Account menu for ${avatarLabel}`}
+                    onClick={handleUserButtonClick}
+                    aria-haspopup={isMobileView ? undefined : true}
+                    aria-expanded={isMobileView ? undefined : showUserMenu}
+                    aria-label={
+                      isMobileView
+                        ? `View profile for ${avatarLabel}`
+                        : `Account menu for ${avatarLabel}`
+                    }
                   >
                     {avatarUrl ? (
                       <img
@@ -255,7 +340,7 @@ function App() {
                       <span className="user-avatar-initial">{avatarInitial}</span>
                     )}
                   </button>
-                  {showUserMenu && (
+                  {!isMobileView && showUserMenu && (
                     <div className="user-dropdown" role="menu">
                       <div className="user-dropdown__header">
                         <span className="user-name">{currentUser.username}</span>
@@ -273,6 +358,7 @@ function App() {
               ) : (
                 <button
                   className="nav-link login-btn"
+                  type="button"
                   onClick={handleOpenLogin}
                 >
                   Login
@@ -315,6 +401,7 @@ function App() {
                 complaints={complaints}
                 currentUser={currentUser}
                 onUserUpdate={handleUserUpdate}
+                onLogout={handleLogout}
               />
             }
           />
@@ -340,7 +427,7 @@ function App() {
           />
         )}
       </main>
-      
+
       <footer className="footer">
         <div className="container">
           <p>&copy; 2025 YouMatter. Your safety is our priority.</p>
