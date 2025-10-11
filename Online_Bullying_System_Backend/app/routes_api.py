@@ -81,6 +81,8 @@ def api_create_complaint():
     data = request.get_json() or {}
     try:
         complaint = create_complaint(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     except Exception as exc:  # broad but ensures we return json
         current_app.logger.exception("Failed to create complaint: %s", exc)
         return jsonify({"error": "Unable to create complaint"}), 400

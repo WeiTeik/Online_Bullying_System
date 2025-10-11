@@ -940,37 +940,74 @@ input:checked + .slider:before {
 }
 
 .attachment-remove-btn {
-  background: #e74c3c;
-  color: white;
-  border: none;
-  border-radius: 3px;
-  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #ffffff;
+  color: #e74c3c;
+  border: 1px solid #e74c3c;
+  border-radius: 50%;
+  padding: 0;
   cursor: pointer;
-  font-size: 0.9em;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.attachment-remove-btn:hover,
+.attachment-remove-btn:focus {
+  background: #e74c3c;
+  color: #ffffff;
+  border-color: #e74c3c;
+  outline: none;
+  box-shadow: 0 2px 6px rgba(231, 76, 60, 0.25);
+}
+
+.attachment-remove-icon {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
 }
 
 .attachment-trigger-btn {
-  display: inline-block;
-  padding: 0.65rem 1.2rem;
-  background: #667eea;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  background: #ffffff;
+  color: #4c6ef5;
+  border: 1px solid #4c6ef5;
+  border-radius: 999px;
   cursor: pointer;
   font-weight: 600;
   margin-right: 12px;
-  transition: background 0.2s;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(76, 110, 245, 0.2);
 }
 
 .attachment-trigger-btn:hover,
 .attachment-trigger-btn:focus {
-  background: #5466d8;
+  background: #4c6ef5;
+  color: #ffffff;
+  border-color: #4c6ef5;
   outline: none;
+  box-shadow: 0 2px 6px rgba(76, 110, 245, 0.25);
 }
 
 .attachment-summary {
   font-size: 0.95rem;
   color: #555;
+}
+
+.attachment-error {
+  margin-top: 0.5rem;
+  color: #c0392b;
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
 .form-error {

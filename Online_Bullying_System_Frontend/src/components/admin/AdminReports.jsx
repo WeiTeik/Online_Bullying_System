@@ -1,52 +1,110 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getComplaints } from '../../services/api';
 
-const reportData = [
-  { date: '20/06/2025', id: 'A0011', name: 'Jocelyn', status: 'New' },
-  { date: '14/06/2025', id: 'A0010', name: 'Anonymous', status: 'New' },
-  { date: '22/05/2025', id: 'A0009', name: 'Elyn', status: 'Rejected' },
-  { date: '14/01/2025', id: 'A0008', name: 'Yi Qi', status: 'In Progress' },
-  { date: '02/07/2025', id: 'A0012', name: 'Hafiz', status: 'New' },
-  { date: '05/07/2025', id: 'A0013', name: 'Siti', status: 'In Progress' },
-  { date: '07/07/2025', id: 'A0014', name: 'Alex', status: 'Resolved' },
-  { date: '10/07/2025', id: 'A0015', name: 'Maya', status: 'New' },
-  { date: '12/07/2025', id: 'A0016', name: 'Daniel', status: 'In Progress' },
-  { date: '15/07/2025', id: 'A0017', name: 'Chong Wei', status: 'Resolved' },
-  { date: '18/07/2025', id: 'A0018', name: 'Farah', status: 'New' },
-  { date: '20/07/2025', id: 'A0019', name: 'Anonymous', status: 'New' },
-  { date: '22/07/2025', id: 'A0020', name: 'Nur', status: 'In Progress' },
-  { date: '25/07/2025', id: 'A0021', name: 'Rafa', status: 'New' },
-  { date: '28/07/2025', id: 'A0022', name: 'Tina', status: 'Resolved' },
-  { date: '30/07/2025', id: 'A0023', name: 'Ibrahim', status: 'New' },
-  { date: '02/08/2025', id: 'A0024', name: 'Leong', status: 'In Progress' },
-  { date: '04/08/2025', id: 'A0025', name: 'Sabrina', status: 'New' },
-  { date: '07/08/2025', id: 'A0026', name: 'Omar', status: 'Resolved' },
-  { date: '09/08/2025', id: 'A0027', name: 'Bella', status: 'New' },
-  { date: '12/08/2025', id: 'A0028', name: 'Khalid', status: 'In Progress' },
-  { date: '14/08/2025', id: 'A0029', name: 'Jasmine', status: 'New' },
-  { date: '17/08/2025', id: 'A0030', name: 'Arif', status: 'Resolved' },
-  { date: '19/08/2025', id: 'A0031', name: 'Hannah', status: 'New' },
-  { date: '21/08/2025', id: 'A0032', name: 'Marcus', status: 'In Progress' },
-  { date: '24/08/2025', id: 'A0033', name: 'Lin', status: 'New' },
-  { date: '26/08/2025', id: 'A0034', name: 'Priya', status: 'Resolved' },
-  { date: '29/08/2025', id: 'A0035', name: 'Azlan', status: 'New' },
-  { date: '31/08/2025', id: 'A0036', name: 'Anonymous', status: 'In Progress' }
-];
+const formatDateTime = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
 
-const AdminReports = () => {
+const statusClass = (status) => {
+  const normalized = (status || '').toLowerCase();
+  if (normalized.includes('progress')) return 'progress';
+  if (normalized.includes('resolve') || normalized.includes('complete')) return 'resolved';
+  if (normalized.includes('reject') || normalized.includes('fail')) return 'rejected';
+  return 'new';
+};
+
+const normaliseStatusLabel = (status) => {
+  if (!status) return 'New';
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+const AdminReports = ({ currentUser, onRefreshComplaints }) => {
+  const [complaints, setComplaints] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!currentUser) {
+      setComplaints([]);
+      setLoading(false);
+      setError('Please sign in to view complaints.');
+      return;
+    }
+
+    const role = (currentUser.role || '').toUpperCase();
+    if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
+      setComplaints([]);
+      setLoading(false);
+      setError('You do not have permission to view this page.');
+      return;
+    }
+
+    let isMounted = true;
+    const fetchComplaints = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getComplaints({ include_comments: false });
+        if (isMounted) {
+          setComplaints(Array.isArray(data) ? data : []);
+          if (onRefreshComplaints) onRefreshComplaints();
+        }
+      } catch (err) {
+        if (isMounted) {
+          const message =
+            err?.response?.data?.error ||
+            err?.message ||
+            'Unable to load complaints.';
+          setError(message);
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchComplaints();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser, onRefreshComplaints]);
+
+  const reportRows = useMemo(() => {
+    return complaints.map((item) => ({
+      key: item.id,
+      complaintId: item.id,
+      referenceCode: item.reference_code || `#${item.id}`,
+      submittedAt: item.submitted_at,
+      date: formatDateTime(item.submitted_at),
+      name: item.student_name || 'Anonymous',
+      status: item.status || 'new',
+      statusLabel: normaliseStatusLabel(item.status || 'new'),
+    }));
+  }, [complaints]);
 
   const filteredData = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return reportData;
-    return reportData.filter((r) =>
+    if (!q) return reportRows;
+    return reportRows.filter((r) =>
       r.name.toLowerCase().includes(q) ||
-      r.id.toLowerCase().includes(q) ||
+      r.referenceCode.toLowerCase().includes(q) ||
       r.date.toLowerCase().includes(q) ||
-      r.status.toLowerCase().includes(q)
+      r.statusLabel.toLowerCase().includes(q)
     );
-  }, [search]);
+  }, [search, reportRows]);
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage));
 
@@ -64,6 +122,7 @@ const AdminReports = () => {
   const pageData = filteredData.slice(startIndex, startIndex + rowsPerPage);
 
   const goToPage = (n) => {
+    if (loading || error) return;
     const page = Math.max(1, Math.min(totalPages, n));
     setCurrentPage(page);
   };
@@ -84,7 +143,7 @@ const AdminReports = () => {
           type="button"
           onClick={() => goToPage(p)}
           aria-current={p === currentPage ? 'page' : undefined}
-          disabled={p === currentPage}
+          disabled={p === currentPage || loading || !!error}
           className={`pagination-btn${p === currentPage ? ' pagination-btn-active' : ''}`}
         >
           {p}
@@ -105,6 +164,7 @@ const AdminReports = () => {
           <input
             type="search"
             value={search}
+            disabled={loading || !!error}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name / ID / date / status"
             aria-label="Search reports"
@@ -136,35 +196,40 @@ const AdminReports = () => {
           </tr>
         </thead>
         <tbody>
-          {pageData.length === 0 ? (
+          {loading ? (
+            <tr>
+              <td colSpan="5" style={{ padding: '12px', textAlign: 'center' }}>Loading complaints…</td>
+            </tr>
+          ) : error ? (
+            <tr>
+              <td colSpan="5" style={{ padding: '12px', textAlign: 'center', color: '#c0392b' }}>{error}</td>
+            </tr>
+          ) : pageData.length === 0 ? (
             <tr>
               <td colSpan="5" style={{ padding: '12px', textAlign: 'center' }}>No reports found.</td>
             </tr>
           ) : (
             pageData.map((row) => (
-              <tr key={row.id}>
+              <tr key={row.complaintId}>
                 <td style={{ padding: '8px' }}>{row.date}</td>
-                <td style={{ padding: '8px' }}>{row.id}</td>
+                <td style={{ padding: '8px' }}>{row.referenceCode}</td>
                 <td style={{ padding: '8px' }}>{row.name}</td>
                 <td style={{ padding: '8px' }}>
                   <span
-                    className={
-                      `status-badge ${
-                        row.status === 'In Progress'
-                          ? 'progress'
-                          : row.status === 'Resolved'
-                          ? 'resolved'
-                          : row.status === 'Rejected'
-                          ? 'rejected'
-                          : 'new'
-                      }`
-                    }
+                    className={`status-badge ${statusClass(row.status)}`}
                   >
-                    {row.status}
+                    {row.statusLabel}
                   </span>
                 </td>
                 <td style={{ padding: '8px' }}>
-                  <button className="action-btn" title="View Report Incident">View</button>
+                  <button
+                    type="button"
+                    className="action-btn"
+                    title="View Report Incident"
+                    onClick={() => navigate(`/admin/reports/${row.complaintId}`)}
+                  >
+                    View
+                  </button>
                 </td>
               </tr>
             ))
@@ -174,7 +239,9 @@ const AdminReports = () => {
 
       <div className="pagination" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
         <div style={{ fontSize: 13, color: '#555' }}>
-          {filteredData.length === 0
+          {loading
+            ? 'Loading…'
+            : filteredData.length === 0
             ? '0 items'
             : `Showing ${startIndex + 1}–${Math.min(startIndex + rowsPerPage, filteredData.length)} of ${filteredData.length}`}
         </div>
@@ -183,7 +250,7 @@ const AdminReports = () => {
           <button
             type="button"
             onClick={() => goToPage(1)}
-            disabled={currentPage === 1}
+            disabled={currentPage === 1 || loading || !!error}
             style={{ padding: '6px 8px', marginRight: 8 }}
           >
             « First
@@ -191,7 +258,7 @@ const AdminReports = () => {
           <button
             type="button"
             onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage === 1}
+            disabled={currentPage === 1 || loading || !!error}
             style={{ padding: '6px 8px', marginRight: 8 }}
           >
             ‹ Prev
@@ -202,7 +269,7 @@ const AdminReports = () => {
           <button
             type="button"
             onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage === totalPages}
+            disabled={currentPage === totalPages || loading || !!error}
             style={{ padding: '6px 8px', marginLeft: 8 }}
           >
             Next ›
@@ -210,7 +277,7 @@ const AdminReports = () => {
           <button
             type="button"
             onClick={() => goToPage(totalPages)}
-            disabled={currentPage === totalPages}
+            disabled={currentPage === totalPages || loading || !!error}
             style={{ padding: '6px 8px', marginLeft: 8 }}
           >
             Last »
