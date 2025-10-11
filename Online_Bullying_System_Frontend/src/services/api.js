@@ -80,6 +80,15 @@ export async function addComplaintComment(complaintId, payload) {
   return res.data;
 }
 
+export async function updateComplaintStatus(complaintId, status) {
+  const payload =
+    typeof status === "string"
+      ? { status }
+      : { status: status?.status || status?.value || status };
+  const res = await api.patch(`/complaints/${complaintId}/status`, payload);
+  return res.data;
+}
+
 export async function getComplaintById(id) {
   const res = await api.get(`/complaints/${id}`);
   return res.data;

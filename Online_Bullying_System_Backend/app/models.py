@@ -69,7 +69,7 @@ class Complaint(db.Model):
     incident_type = db.Column(db.String(120), nullable=False)
     description = db.Column(db.Text, nullable=False)
     room_number = db.Column(db.String(64), nullable=True)
-    incident_date = db.Column(db.Date, nullable=True)
+    incident_date = db.Column(db.DateTime(timezone=True), nullable=True)
     witnesses = db.Column(db.Text, nullable=True)
     attachments = db.Column(db.JSON, nullable=True)
     status = db.Column(

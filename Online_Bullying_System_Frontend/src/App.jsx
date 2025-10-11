@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import HomePage from './components/StudentHome';
 import { LoginModal, LoginPage } from './components/Login';
@@ -41,6 +41,7 @@ function App() {
   const [pendingRoute, setPendingRoute] = useState(null)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [isMobileView, setIsMobileView] = useState(false)
+  const [complaintsVersion, setComplaintsVersion] = useState(0)
 
   // Add this inside App to get the current route
   const location = useLocation();
@@ -148,6 +149,9 @@ function App() {
     )
     return comment
   }
+  const refreshComplaints = useCallback(() => {
+    setComplaintsVersion(prev => prev + 1)
+  }, [])
   useEffect(() => {
     if (!currentUser) {
       setComplaints([])
@@ -186,7 +190,7 @@ function App() {
     return () => {
       isActive = false
     }
-  }, [currentUser])
+  }, [currentUser, complaintsVersion])
 
   const handleProtectedNav = (event, path) => {
     if (!currentUser) {
@@ -415,7 +419,7 @@ function App() {
               />
             }
           />
-          <Route path="/admin/*" element={<AdminDashboard />} />
+          <Route path="/admin/*" element={<AdminDashboard currentUser={currentUser} onRefreshComplaints={refreshComplaints} />} />
           <Route path="*" element={<HomePage />} />
         </Routes>
         {showLogin && !currentUser && (

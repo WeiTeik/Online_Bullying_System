@@ -6,6 +6,7 @@ import AdminStudents from './AdminStudents';
 import AdminMembers from './AdminMembers';
 import AdminStatistics from './AdminStatistics';
 import AdminSettings from './AdminSettings';
+import AdminReportIncident from './AdminReportIncident';
 import youMatterLogo from '../../assets/YouMatter_logo_bg_removed.png';
 import './admin.css';
 
@@ -19,7 +20,7 @@ const navItems = [
   { label: 'Logout', icon: '↩️', section: 'logout', path: '/login' },
 ];
 
-const AdminDashboard = () => {
+const AdminDashboard = ({ currentUser, onRefreshComplaints }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState('dashboard');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false); // <--- added state
@@ -129,7 +130,8 @@ const AdminDashboard = () => {
         {/* Nested routes render the individual section components */}
         <Routes>
           <Route index element={<AdminHome />} />
-          <Route path="reports" element={<AdminReports />} />
+          <Route path="reports" element={<AdminReports currentUser={currentUser} onRefreshComplaints={onRefreshComplaints} />} />
+          <Route path="reports/:reportId" element={<AdminReportIncident currentUser={currentUser} onRefreshComplaints={onRefreshComplaints} />} />
           <Route path="students" element={<AdminStudents />} />
           <Route path="admins" element={<AdminMembers />} />
           <Route path="statistics" element={<AdminStatistics />} />

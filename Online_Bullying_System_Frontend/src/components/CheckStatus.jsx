@@ -11,13 +11,6 @@ const formatDateTime = (value) => {
   });
 };
 
-const formatDate = (value) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, { dateStyle: 'medium' });
-};
-
 const normaliseStatus = (status = '') =>
   status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -195,7 +188,7 @@ function ComplaintStatus({ complaints = [], loading, error, onAddComment, curren
                     </div>
                   )}
                   <p><strong>Type:</strong> {incidentType || '—'}</p>
-                  <p><strong>Incident Date:</strong> {formatDate(incidentDate)}</p>
+                  <p><strong>Incident Date:</strong> {formatDateTime(incidentDate)}</p>
                   <p><strong>Room:</strong> {roomNumber || '—'}</p>
                   <p><strong>Student:</strong> {studentName || '—'}</p>
                   <p className="complaint-description">
