@@ -20,7 +20,7 @@ const navItems = [
   { label: 'Logout', icon: '↩️', section: 'logout', path: '/login' },
 ];
 
-const AdminDashboard = ({ currentUser, onRefreshComplaints }) => {
+const AdminDashboard = ({ currentUser, complaints, complaintsLoading, complaintsError, onRefreshComplaints }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState('dashboard');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false); // <--- added state
@@ -129,9 +129,34 @@ const AdminDashboard = ({ currentUser, onRefreshComplaints }) => {
 
         {/* Nested routes render the individual section components */}
         <Routes>
-          <Route index element={<AdminHome />} />
-          <Route path="reports" element={<AdminReports currentUser={currentUser} onRefreshComplaints={onRefreshComplaints} />} />
-          <Route path="reports/:reportId" element={<AdminReportIncident currentUser={currentUser} onRefreshComplaints={onRefreshComplaints} />} />
+          <Route
+            index
+            element={
+              <AdminHome
+                complaints={complaints}
+                isLoading={complaintsLoading}
+                error={complaintsError}
+              />
+            }
+          />
+          <Route
+            path="reports"
+            element={
+              <AdminReports
+                currentUser={currentUser}
+                onRefreshComplaints={onRefreshComplaints}
+              />
+            }
+          />
+          <Route
+            path="reports/:reportId"
+            element={
+              <AdminReportIncident
+                currentUser={currentUser}
+                onRefreshComplaints={onRefreshComplaints}
+              />
+            }
+          />
           <Route path="students" element={<AdminStudents />} />
           <Route path="admins" element={<AdminMembers />} />
           <Route path="statistics" element={<AdminStatistics />} />
