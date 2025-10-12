@@ -61,7 +61,6 @@ const AdminReports = ({ currentUser, onRefreshComplaints }) => {
         const data = await getComplaints({ include_comments: false });
         if (isMounted) {
           setComplaints(Array.isArray(data) ? data : []);
-          if (onRefreshComplaints) onRefreshComplaints();
         }
       } catch (err) {
         if (isMounted) {
@@ -80,7 +79,7 @@ const AdminReports = ({ currentUser, onRefreshComplaints }) => {
     return () => {
       isMounted = false;
     };
-  }, [currentUser, onRefreshComplaints]);
+  }, [currentUser]);
 
   const reportRows = useMemo(() => {
     return complaints.map((item) => ({

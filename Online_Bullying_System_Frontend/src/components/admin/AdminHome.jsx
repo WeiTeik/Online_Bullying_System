@@ -1,39 +1,82 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './admin.css'; 
 
-// Demo report data (replace with import in production)
-const demoReportData = [
-  { date: '30/07/2025', id: 'A0023', name: 'Ibrahim', status: 'New' },
-  { date: '02/08/2025', id: 'A0024', name: 'Leong', status: 'In Progress' },
-  { date: '04/08/2025', id: 'A0025', name: 'Sabrina', status: 'New' },
-  { date: '07/08/2025', id: 'A0026', name: 'Omar', status: 'Resolved' },
-  { date: '09/08/2025', id: 'A0027', name: 'Bella', status: 'New' },
-];
+const formatDateTime = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
 
-const dashboardStats = [
-  { label: 'New Case', value: 1 },
-  { label: 'Progress Case', value: 1 },
-  { label: 'Complete Case', value: 2 },
-  { label: 'Total Case', value: 5 },
-];
+const normaliseStatus = (status) => {
+  if (!status) return 'New';
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+};
 
-const AdminHome = () => {
+const statusClass = (status) => {
+  const normalized = (status || '').toLowerCase();
+  if (normalized.includes('progress')) return 'progress';
+  if (normalized.includes('resolve') || normalized.includes('complete')) return 'resolved';
+  if (normalized.includes('reject') || normalized.includes('fail')) return 'rejected';
+  return 'new';
+};
+
+const AdminHome = ({ complaints = [], isLoading, error }) => {
   const navigate = useNavigate();
 
-  // Show the latest 5 reports (sorted by date descending)
-  const latestReports = [...demoReportData]
-    .sort((a, b) => {
-      const toISO = (d) => d.split('/').reverse().join('-');
-      return new Date(toISO(b.date)) - new Date(toISO(a.date));
-    })
-    .slice(0, 5);
+  const stats = useMemo(() => {
+    const totals = complaints.reduce(
+      (acc, complaint) => {
+        const status = (complaint.status || '').toLowerCase();
+        if (status === 'in_progress') acc.progress += 1;
+        else if (status === 'resolved') acc.complete += 1;
+        else if (status === 'rejected') acc.rejected += 1;
+        else if (status === 'new') acc.new += 1;
+        else acc.other += 1;
+        acc.total += 1;
+        return acc;
+      },
+      { new: 0, progress: 0, complete: 0, rejected: 0, other: 0, total: 0 }
+    );
+
+    return [
+      { label: 'New Case', value: totals.new },
+      { label: 'Progress Case', value: totals.progress },
+      { label: 'Complete Case', value: totals.complete },
+      { label: 'Reject Case', value: totals.rejected },
+      { label: 'Total Case', value: totals.total },
+    ];
+  }, [complaints]);
+
+  const latestReports = useMemo(() => {
+    if (!Array.isArray(complaints) || complaints.length === 0) {
+      return [];
+    }
+    const getTime = (item) => new Date(item.submitted_at || item.submittedAt || 0).getTime();
+    return [...complaints]
+      .sort((a, b) => getTime(b) - getTime(a))
+      .slice(0, 5)
+      .map((item) => ({
+        id: item.id,
+        referenceCode: item.reference_code || `#${item.id}`,
+        name: item.student_name || 'Anonymous',
+        submittedAt: item.submitted_at || item.submittedAt,
+        status: item.status || 'new',
+      }));
+  }, [complaints]);
 
   return (
     <div>
       <h2>Dashboard</h2>
       <div className="dashboard-cards">
-        {dashboardStats.map(stat => (
+        {stats.map(stat => (
           <div className="dashboard-card" key={stat.label}>
             <div className="card-label">{stat.label}</div>
             <div className="card-circle">
@@ -57,33 +100,48 @@ const AdminHome = () => {
             </tr>
           </thead>
           <tbody>
-            {latestReports.map((row) => (
-              <tr key={row.id}>
-                <td>{row.date}</td>
-                <td>{row.id}</td>
-                <td>{row.name}</td>
-                <td>
-                  <span
-                    className={
-                      `status-badge ${
-                        row.status === 'In Progress'
-                          ? 'progress'
-                          : row.status === 'Resolved'
-                          ? 'resolved'
-                          : row.status === 'Rejected'
-                          ? 'rejected'
-                          : 'new'
-                      }`
-                    }
-                  >
-                    {row.status}
-                  </span>
-                </td>
-                <td>
-                  <button className="action-btn" title="View Report Incident">View</button>
+            {isLoading ? (
+              <tr>
+                <td colSpan="5" style={{ textAlign: 'center', padding: '12px' }}>
+                  Loading recent reports…
                 </td>
               </tr>
-            ))}
+            ) : error ? (
+              <tr>
+                <td colSpan="5" style={{ textAlign: 'center', padding: '12px', color: '#c0392b' }}>
+                  {error}
+                </td>
+              </tr>
+            ) : latestReports.length === 0 ? (
+              <tr>
+                <td colSpan="5" style={{ textAlign: 'center', padding: '12px' }}>
+                  No reports available yet.
+                </td>
+              </tr>
+            ) : (
+              latestReports.map((row) => (
+                <tr key={row.id}>
+                  <td>{formatDateTime(row.submittedAt)}</td>
+                  <td>{row.referenceCode}</td>
+                  <td>{row.name}</td>
+                  <td>
+                    <span className={`status-badge ${statusClass(row.status)}`}>
+                      {normaliseStatus(row.status)}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      className="action-btn"
+                      title="View Report Incident"
+                      onClick={() => row.id && navigate(`/admin/reports/${row.id}`)}
+                      disabled={!row.id}
+                    >
+                      View
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
         <div style={{ marginTop: 12, textAlign: 'right' }}>

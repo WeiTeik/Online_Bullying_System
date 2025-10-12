@@ -419,7 +419,18 @@ function App() {
               />
             }
           />
-          <Route path="/admin/*" element={<AdminDashboard currentUser={currentUser} onRefreshComplaints={refreshComplaints} />} />
+          <Route
+            path="/admin/*"
+            element={
+              <AdminDashboard
+                currentUser={currentUser}
+                complaints={complaints}
+                complaintsLoading={isComplaintsLoading}
+                complaintsError={complaintsError}
+                onRefreshComplaints={refreshComplaints}
+              />
+            }
+          />
           <Route path="*" element={<HomePage />} />
         </Routes>
         {showLogin && !currentUser && (
