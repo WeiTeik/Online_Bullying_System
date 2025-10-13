@@ -15,6 +15,11 @@ class UserRole(enum.Enum):
     ADMIN = "ADMIN"
     SUPER_ADMIN = "SUPER_ADMIN"
 
+class UserStatus(enum.Enum):
+    PENDING = "pending"
+    ACTIVE = "active"
+
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -22,6 +27,10 @@ class User(db.Model):
     role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.STUDENT)
     password_hash = db.Column(db.String(512), nullable=False)
     avatar_url = db.Column(db.String(512), nullable=True)
+    full_name = db.Column(db.String(120), nullable=True)
+    status = db.Column(db.String(32), nullable=False, default=UserStatus.ACTIVE.value)
+    invited_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    last_login_at = db.Column(db.DateTime(timezone=True), nullable=True)
     complaints = db.relationship(
         "Complaint",
         backref="user",
@@ -48,6 +57,10 @@ class User(db.Model):
             "email": self.email,
             "role": self.role.value,
             "avatar_url": self.avatar_url,
+            "full_name": self.full_name,
+            "status": self.status,
+            "invited_at": self.invited_at.isoformat() if isinstance(self.invited_at, (datetime, date)) else self.invited_at,
+            "last_login_at": self.last_login_at.isoformat() if isinstance(self.last_login_at, (datetime, date)) else self.last_login_at,
             # do not include password_hash
         }
         return data

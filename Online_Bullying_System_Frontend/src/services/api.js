@@ -49,6 +49,31 @@ export async function deleteUser(id) {
   return res.data;
 }
 
+export async function getStudents() {
+  const res = await api.get("/admin/students");
+  return res.data;
+}
+
+export async function inviteStudent(payload) {
+  const res = await api.post("/admin/students", payload);
+  return res.data;
+}
+
+export async function updateStudent(id, payload) {
+  const res = await api.patch(`/admin/students/${id}`, payload);
+  return res.data;
+}
+
+export async function resetStudentPassword(id) {
+  const res = await api.post(`/admin/students/${id}/reset_password`);
+  return res.data;
+}
+
+export async function deleteStudent(id) {
+  const res = await api.delete(`/admin/students/${id}`);
+  return res.data;
+}
+
 export async function changeUserPassword(id, payload) {
   const res = await api.post(`/users/${id}/password`, payload);
   return res.data;
