@@ -4,7 +4,7 @@ import os
 import time
 from flask import Blueprint, jsonify, request, current_app, send_from_directory
 from werkzeug.utils import secure_filename
-from app.models import User, db
+from app.models import User, UserStatus, db, now_kuala_lumpur
 from app.crud.user import get_all_users, get_user_by_id, create_user, update_user, delete_user
 from app.crud.complaint import (
     create_complaint,
@@ -14,6 +14,16 @@ from app.crud.complaint import (
     get_complaint_by_id,
     get_comments,
     update_complaint_status,
+)
+from app.crud.student import (
+    list_students,
+    invite_student,
+    update_student,
+    reset_student_password,
+    remove_student,
+    StudentInviteError,
+    StudentDataError,
+    StudentNotFoundError,
 )
 
 api_bp = Blueprint("api", __name__)
@@ -54,6 +64,72 @@ def api_delete_user(user_id):
     ok = delete_user(user_id)
     if not ok:
         return jsonify({"error": "User not found"}), 404
+    return jsonify({"success": True}), 200
+
+
+@api_bp.route("/admin/students", methods=["GET"])
+def api_list_students():
+    try:
+        students = list_students()
+    except StudentDataError as exc:
+        return jsonify({"error": str(exc)}), 503
+    return jsonify(students), 200
+
+
+@api_bp.route("/admin/students", methods=["POST"])
+def api_invite_student():
+    data = request.get_json() or {}
+    full_name = data.get("full_name") or data.get("name")
+    email = data.get("email")
+    try:
+        student, temporary_password = invite_student(full_name, email)
+    except StudentInviteError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except StudentDataError as exc:
+        return jsonify({"error": str(exc)}), 503
+    except Exception as exc:  # pylint: disable=broad-except
+        current_app.logger.exception("Failed to invite student: %s", exc)
+        return jsonify({"error": "Unable to invite student at this time."}), 500
+    return jsonify({"student": student, "temporary_password": temporary_password}), 201
+
+
+@api_bp.route("/admin/students/<int:student_id>", methods=["PATCH"])
+def api_update_student(student_id):
+    data = request.get_json() or {}
+    full_name = data.get("full_name") or data.get("name")
+    email = data.get("email")
+    try:
+        student = update_student(student_id, full_name, email)
+    except StudentNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except StudentInviteError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except StudentDataError as exc:
+        return jsonify({"error": str(exc)}), 503
+    return jsonify(student), 200
+
+
+@api_bp.route("/admin/students/<int:student_id>/reset_password", methods=["POST"])
+def api_reset_student_password(student_id):
+    try:
+        student, temporary_password = reset_student_password(student_id)
+    except StudentNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except StudentInviteError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except StudentDataError as exc:
+        return jsonify({"error": str(exc)}), 503
+    return jsonify({"student": student, "temporary_password": temporary_password}), 200
+
+
+@api_bp.route("/admin/students/<int:student_id>", methods=["DELETE"])
+def api_remove_student(student_id):
+    try:
+        remove_student(student_id)
+    except StudentNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except StudentDataError as exc:
+        return jsonify({"error": str(exc)}), 503
     return jsonify({"success": True}), 200
 
 
@@ -181,6 +257,14 @@ def api_login():
     # success
     print(f"Login successful: user id={user.id} username={user.username} from {request.remote_addr}")
     current_app.logger.info("Login successful: user id=%s username=%s from %s", user.id, user.username, request.remote_addr)
+    updated = False
+    if (user.status or "").lower() == UserStatus.PENDING.value:
+        user.status = UserStatus.ACTIVE.value
+        updated = True
+    user.last_login_at = now_kuala_lumpur()
+    updated = True
+    if updated:
+        db.session.commit()
     return jsonify(user.to_dict()), 200
 
 
