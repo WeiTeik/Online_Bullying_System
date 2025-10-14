@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import HomePage from './components/StudentHome';
 import { LoginModal, LoginPage } from './components/Login';
 import { SubmitComplaint } from './components/SubmitComplaint';
@@ -11,6 +11,17 @@ import { login as loginRequest, toAbsoluteUrl, getComplaints, addComplaintCommen
 import './App.css';
 
 const LOCAL_STORAGE_USER_KEY = 'obs.currentUser';
+
+const ADMIN_ROLES = new Set(['ADMIN', 'SUPER ADMIN']);
+
+const normalizeRole = (role) => {
+  if (!role) return '';
+  return String(role).replace(/[_-]/g, ' ').trim().toUpperCase();
+};
+
+const isAdminUser = (user) => ADMIN_ROLES.has(normalizeRole(user?.role));
+
+const getRoleLandingPath = (user) => (isAdminUser(user) ? '/admin' : '/home');
 
 const loadStoredUser = () => {
   if (typeof window === 'undefined') {
@@ -85,7 +96,14 @@ function App() {
       setCurrentUser(user)
       setShowLogin(false)
       setShowUserMenu(false)
-      navigate(pendingRoute || '/home')
+      const landingPath = getRoleLandingPath(user)
+      const nextRoute =
+        isAdminUser(user)
+          ? landingPath
+          : pendingRoute && !pendingRoute.startsWith('/admin')
+            ? pendingRoute
+            : landingPath
+      navigate(nextRoute)
       setPendingRoute(null)
     } catch (err) {
       const message =
@@ -259,6 +277,7 @@ function App() {
   }, [location.pathname])
 
   const isAdminRoute = location.pathname.startsWith('/admin');
+  const isLoginRoute = location.pathname === '/login';
 
   const avatarInitial = (currentUser?.username || currentUser?.email || 'U')
     .charAt(0)
@@ -268,7 +287,7 @@ function App() {
 
   return (
     <div className="App">
-      {!isAdminRoute && (
+      {!isAdminRoute && !isLoginRoute && (
         <header className={`header${isMobileNavOpen ? ' header--mobile-open' : ''}`}>
           <div className="header-container">
             <h1 className="logo">YouMatter</h1>
@@ -412,24 +431,35 @@ function App() {
           <Route
             path="/login"
             element={
-              <LoginPage
-                onLogin={handleLogin}
-                error={authError}
-                isLoading={isAuthLoading}
-              />
+              currentUser ? (
+                <Navigate to={getRoleLandingPath(currentUser)} replace />
+              ) : (
+                <LoginPage
+                  onLogin={handleLogin}
+                  error={authError}
+                  isLoading={isAuthLoading}
+                />
+              )
             }
           />
           <Route
             path="/admin/*"
             element={
-              <AdminDashboard
-                currentUser={currentUser}
-                complaints={complaints}
-                complaintsLoading={isComplaintsLoading}
-                complaintsError={complaintsError}
-                onRefreshComplaints={refreshComplaints}
-                onUserUpdate={handleUserUpdate}
-              />
+              !currentUser ? (
+                <Navigate to="/login" replace />
+              ) : !isAdminUser(currentUser) ? (
+                <Navigate to="/home" replace />
+              ) : (
+                <AdminDashboard
+                  currentUser={currentUser}
+                  complaints={complaints}
+                  complaintsLoading={isComplaintsLoading}
+                  complaintsError={complaintsError}
+                  onRefreshComplaints={refreshComplaints}
+                  onUserUpdate={handleUserUpdate}
+                  onLogout={handleLogout}
+                />
+              )
             }
           />
           <Route path="*" element={<HomePage />} />
