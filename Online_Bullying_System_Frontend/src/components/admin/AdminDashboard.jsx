@@ -20,7 +20,14 @@ const navItems = [
   { label: 'Logout', icon: '↩️', section: 'logout', path: '/login' },
 ];
 
-const AdminDashboard = ({ currentUser, complaints, complaintsLoading, complaintsError, onRefreshComplaints }) => {
+const AdminDashboard = ({
+  currentUser,
+  complaints,
+  complaintsLoading,
+  complaintsError,
+  onRefreshComplaints,
+  onUserUpdate,
+}) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState('dashboard');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false); // <--- added state
@@ -163,7 +170,15 @@ const AdminDashboard = ({ currentUser, complaints, complaintsLoading, complaints
             element={<AdminMembers currentUser={currentUser} />}
           />
           <Route path="statistics" element={<AdminStatistics />} />
-          <Route path="settings" element={<AdminSettings />} />
+          <Route
+            path="settings"
+            element={
+              <AdminSettings
+                currentUser={currentUser}
+                onUserUpdate={onUserUpdate}
+              />
+            }
+          />
         </Routes>
       </div>
     </div>

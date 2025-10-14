@@ -1,6 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getUser, uploadUserAvatar, deleteUserAvatar, changeUserPassword, toAbsoluteUrl } from '../services/api';
+import {
+  getUser,
+  uploadUserAvatar,
+  deleteUserAvatar,
+  changeUserPassword,
+  toAbsoluteUrl,
+  updateUser,
+} from '../services/api';
 
 const MAX_AVATAR_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB
 
@@ -14,7 +21,14 @@ const formatDateTime = (value) => {
   });
 };
 
-function StudentProfilePage({ complaints = [], showHistory = true, currentUser, onUserUpdate, onLogout }) {
+function StudentProfilePage({
+  complaints = [],
+  showHistory = true,
+  currentUser,
+  onUserUpdate,
+  onLogout,
+  allowNameEdit = false,
+}) {
   const [activeTab, setActiveTab] = useState('account');
   const [showReset, setShowReset] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
@@ -32,6 +46,10 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [avatarBusyMessage, setAvatarBusyMessage] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [nameValue, setNameValue] = useState('');
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [nameMessage, setNameMessage] = useState(null);
+  const [nameError, setNameError] = useState(null);
   const fileInputRef = useRef(null);
   const avatarMenuRef = useRef(null);
   const navigate = useNavigate();
@@ -79,6 +97,19 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
       isMounted = false;
     };
   }, [currentUser, navigate]);
+
+  useEffect(() => {
+    if (!allowNameEdit) {
+      return;
+    }
+    if (!user) {
+      setNameValue('');
+      return;
+    }
+    setNameValue(user.full_name || '');
+    setNameMessage(null);
+    setNameError(null);
+  }, [allowNameEdit, user]);
 
   useEffect(() => {
     if (!showAvatarMenu) return;
@@ -143,6 +174,63 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
   const handleMobileLogout = () => {
     if (typeof onLogout === 'function') {
       onLogout();
+    }
+  };
+
+  const handleNameChange = (event) => {
+    if (!allowNameEdit) {
+      return;
+    }
+    setNameValue(event.target.value);
+    if (nameError) {
+      setNameError(null);
+    }
+    if (nameMessage) {
+      setNameMessage(null);
+    }
+  };
+
+  const handleNameSubmit = async (event) => {
+    event.preventDefault();
+    if (!allowNameEdit) {
+      return;
+    }
+    if (!currentUser?.id) {
+      setNameError('Unable to verify your account. Please log in again.');
+      return;
+    }
+
+    const trimmedName = nameValue.trim();
+    if (!trimmedName) {
+      setNameError('Name cannot be empty.');
+      return;
+    }
+
+    const currentFullName = (user?.full_name || '').trim();
+    if (trimmedName === currentFullName) {
+      setNameMessage('No changes to save.');
+      return;
+    }
+
+    try {
+      setIsSavingName(true);
+      setNameError(null);
+      setNameMessage(null);
+      const updatedUser = await updateUser(currentUser.id, { full_name: trimmedName });
+      setUser(updatedUser);
+      if (onUserUpdate) {
+        onUserUpdate(updatedUser);
+      }
+      setNameValue(trimmedName);
+      setNameMessage('Name updated successfully.');
+    } catch (err) {
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        'Failed to update name. Please try again.';
+      setNameError(message);
+    } finally {
+      setIsSavingName(false);
     }
   };
 
@@ -289,6 +377,9 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
 
   const avatarSrc = user?.avatar_url ? toAbsoluteUrl(user.avatar_url) : null;
   const displayName = user?.full_name || user?.username || 'Student';
+  const savedFullName = (user?.full_name || '').trim();
+  const normalizedNameValue = nameValue.trim();
+  const isNameUnchanged = normalizedNameValue === savedFullName;
   const displayEmail = user?.email || 'Not available';
   const avatarLabelSource = (displayName || displayEmail || '').trim() || 'User';
   const avatarInitial = avatarLabelSource.charAt(0).toUpperCase();
@@ -438,12 +529,34 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
                   <div className="info-block">
                     <div className="info-row">
                       <span className="info-label">Name</span>
-                      <input
-                        type="text"
-                        value={displayName}
-                        disabled
-                        className="info-input"
-                      />
+                      {allowNameEdit ? (
+                        <form className="info-editable" onSubmit={handleNameSubmit}>
+                          <input
+                            type="text"
+                            value={nameValue}
+                            onChange={handleNameChange}
+                            className="info-input"
+                            disabled={isSavingName}
+                            placeholder="Enter your name"
+                          />
+                          <button
+                            type="submit"
+                            className="info-save-button"
+                            disabled={
+                              isSavingName || !normalizedNameValue || isNameUnchanged
+                            }
+                          >
+                            {isSavingName ? 'Saving...' : 'Save'}
+                          </button>
+                        </form>
+                      ) : (
+                        <input
+                          type="text"
+                          value={displayName}
+                          disabled
+                          className="info-input"
+                        />
+                      )}
                     </div>
 
                     <div className="info-row">
@@ -455,6 +568,17 @@ function StudentProfilePage({ complaints = [], showHistory = true, currentUser, 
                         className="info-input"
                       />
                     </div>
+
+                    {allowNameEdit && (nameError || nameMessage) && (
+                      <div
+                        className={`info-feedback${
+                          nameError ? ' info-feedback--error' : ' info-feedback--success'
+                        }`}
+                        role="status"
+                      >
+                        {nameError || nameMessage}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

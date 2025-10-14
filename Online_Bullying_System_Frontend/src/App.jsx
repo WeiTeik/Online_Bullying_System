@@ -428,6 +428,7 @@ function App() {
                 complaintsLoading={isComplaintsLoading}
                 complaintsError={complaintsError}
                 onRefreshComplaints={refreshComplaints}
+                onUserUpdate={handleUserUpdate}
               />
             }
           />
