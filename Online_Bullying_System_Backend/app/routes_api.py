@@ -25,6 +25,11 @@ from app.crud.student import (
     StudentDataError,
     StudentNotFoundError,
 )
+from app.crud.admins import (
+    invite_admin,
+    AdminInviteError,
+    AdminDataError,
+)
 
 api_bp = Blueprint("api", __name__)
 
@@ -131,6 +136,24 @@ def api_remove_student(student_id):
     except StudentDataError as exc:
         return jsonify({"error": str(exc)}), 503
     return jsonify({"success": True}), 200
+
+
+@api_bp.route("/admin/admins", methods=["POST"])
+def api_invite_admin():
+    data = request.get_json() or {}
+    full_name = data.get("full_name") or data.get("name")
+    email = data.get("email")
+    role = data.get("role") or "ADMIN"
+    try:
+        admin, temporary_password = invite_admin(full_name, email, role)
+    except AdminInviteError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except AdminDataError as exc:
+        return jsonify({"error": str(exc)}), 503
+    except Exception as exc:  # pylint: disable=broad-except
+        current_app.logger.exception("Failed to invite admin: %s", exc)
+        return jsonify({"error": "Unable to invite administrator at this time."}), 500
+    return jsonify({"admin": admin, "temporary_password": temporary_password}), 201
 
 
 @api_bp.route("/complaints", methods=["GET"])

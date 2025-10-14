@@ -158,7 +158,10 @@ const AdminDashboard = ({ currentUser, complaints, complaintsLoading, complaints
             }
           />
           <Route path="students" element={<AdminStudents />} />
-          <Route path="admins" element={<AdminMembers />} />
+          <Route
+            path="admins"
+            element={<AdminMembers currentUser={currentUser} />}
+          />
           <Route path="statistics" element={<AdminStatistics />} />
           <Route path="settings" element={<AdminSettings />} />
         </Routes>

@@ -154,73 +154,73 @@ const AdminReports = ({ currentUser, onRefreshComplaints }) => {
 
   return (
     <div className="report-section">
-      <div
-        className="report-header"
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}
-      >
-        <h2 style={{ margin: 0 }}>Reports</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input
-            type="search"
-            value={search}
-            disabled={loading || !!error}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name / ID / date / status"
-            aria-label="Search reports"
-            className="report-search"
-            style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid #ccc' }}
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              aria-label="Clear search"
-              className="clear-btn"
-              style={{ padding: '6px 8px' }}
-            >
-              ×
-            </button>
-          )}
+      <div className="report-header">
+        <h2 className="report-title">Reports</h2>
+        <div className="report-header-actions">
+          <div className="admin-students-search report-search">
+            <span className="admin-students-search-icon" aria-hidden="true">
+              &#128269;
+            </span>
+            <input
+              type="search"
+              value={search}
+              disabled={loading || !!error}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name / ID / date / status"
+              aria-label="Search reports"
+              className="admin-students-search-input"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="admin-search-clear"
+              >
+                &times;
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <table className="report-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <table className="report-table">
         <thead>
           <tr>
-            <th style={{ textAlign: 'left', padding: '8px' }}>Date</th>
-            <th style={{ textAlign: 'left', padding: '8px' }}>Complaint ID</th>
-            <th style={{ textAlign: 'left', padding: '8px' }}>Name</th>
-            <th style={{ textAlign: 'left', padding: '8px' }}>Status</th>
-            <th style={{ textAlign: 'left', padding: '8px' }}>Action</th>
+            <th>Date</th>
+            <th>Complaint ID</th>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
           {loading ? (
             <tr>
-              <td colSpan="5" style={{ padding: '12px', textAlign: 'center' }}>Loading complaints…</td>
+              <td colSpan="5" className="report-table-message">Loading complaints…</td>
             </tr>
           ) : error ? (
             <tr>
-              <td colSpan="5" style={{ padding: '12px', textAlign: 'center', color: '#c0392b' }}>{error}</td>
+              <td colSpan="5" className="report-table-message report-table-error">{error}</td>
             </tr>
           ) : pageData.length === 0 ? (
             <tr>
-              <td colSpan="5" style={{ padding: '12px', textAlign: 'center' }}>No reports found.</td>
+              <td colSpan="5" className="report-table-message">No reports found.</td>
             </tr>
           ) : (
             pageData.map((row) => (
               <tr key={row.complaintId}>
-                <td style={{ padding: '8px' }}>{row.date}</td>
-                <td style={{ padding: '8px' }}>{row.referenceCode}</td>
-                <td style={{ padding: '8px' }}>{row.name}</td>
-                <td style={{ padding: '8px' }}>
+                <td>{row.date}</td>
+                <td>{row.referenceCode}</td>
+                <td>{row.name}</td>
+                <td>
                   <span
                     className={`status-badge ${statusClass(row.status)}`}
                   >
                     {row.statusLabel}
                   </span>
                 </td>
-                <td style={{ padding: '8px' }}>
+                <td>
                   <button
                     type="button"
                     className="action-btn"
@@ -236,8 +236,8 @@ const AdminReports = ({ currentUser, onRefreshComplaints }) => {
         </tbody>
       </table>
 
-      <div className="pagination" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-        <div style={{ fontSize: 13, color: '#555' }}>
+      <div className="report-pagination">
+        <div className="report-pagination-summary">
           {loading
             ? 'Loading…'
             : filteredData.length === 0
@@ -245,20 +245,20 @@ const AdminReports = ({ currentUser, onRefreshComplaints }) => {
             : `Showing ${startIndex + 1}–${Math.min(startIndex + rowsPerPage, filteredData.length)} of ${filteredData.length}`}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div className="report-pagination-controls">
           <button
             type="button"
+            className="pagination-btn report-pagination-nav"
             onClick={() => goToPage(1)}
             disabled={currentPage === 1 || loading || !!error}
-            style={{ padding: '6px 8px', marginRight: 8 }}
           >
             « First
           </button>
           <button
             type="button"
+            className="pagination-btn report-pagination-nav"
             onClick={() => goToPage(currentPage - 1)}
             disabled={currentPage === 1 || loading || !!error}
-            style={{ padding: '6px 8px', marginRight: 8 }}
           >
             ‹ Prev
           </button>
@@ -267,17 +267,17 @@ const AdminReports = ({ currentUser, onRefreshComplaints }) => {
 
           <button
             type="button"
+            className="pagination-btn report-pagination-nav"
             onClick={() => goToPage(currentPage + 1)}
             disabled={currentPage === totalPages || loading || !!error}
-            style={{ padding: '6px 8px', marginLeft: 8 }}
           >
             Next ›
           </button>
           <button
             type="button"
+            className="pagination-btn report-pagination-nav"
             onClick={() => goToPage(totalPages)}
             disabled={currentPage === totalPages || loading || !!error}
-            style={{ padding: '6px 8px', marginLeft: 8 }}
           >
             Last »
           </button>

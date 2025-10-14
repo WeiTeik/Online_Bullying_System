@@ -1,211 +1,518 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './admin.css';
+import {
+  getUsers,
+  inviteAdmin as inviteAdminApi,
+  updateUser as updateUserApi,
+  deleteUser as deleteUserApi,
+} from '../../services/api';
 
-const mockAdmins = [
-  {
-    id: 1,
-    name: 'Alice Admin',
-    email: 'alice@admin.com',
-    avatar: 'https://randomuser.me/api/portraits/women/10.jpg',
-  },
-  {
-    id: 2,
-    name: 'Bob Admin',
-    email: 'bob@admin.com',
-    avatar: 'https://randomuser.me/api/portraits/men/11.jpg',
-  },
-  {
-    id: 3,
-    name: 'Charlie Admin',
-    email: 'charlie@admin.com',
-    avatar: 'https://randomuser.me/api/portraits/men/12.jpg',
-  },
-  {
-    id: 4,
-    name: 'Diana Admin',
-    email: 'diana@admin.com',
-    avatar: 'https://randomuser.me/api/portraits/women/13.jpg',
-  },
-  {
-    id: 5,
-    name: 'Eve Admin',
-    email: 'eve@admin.com',
-    avatar: 'https://randomuser.me/api/portraits/women/14.jpg',
-  },
-  {
-    id: 6,
-    name: 'Frank Admin',
-    email: 'frank@admin.com',
-    avatar: 'https://randomuser.me/api/portraits/men/15.jpg',
-  },
-  {
-    id: 7,
-    name: 'Grace Admin',
-    email: 'grace@admin.com',
-    avatar: 'https://randomuser.me/api/portraits/women/16.jpg',
-  },
-  {
-    id: 8,
-    name: 'Henry Admin',
-    email: 'henry@admin.com',
-    avatar: 'https://randomuser.me/api/portraits/men/17.jpg',
-  },
-  {
-    id: 9,
-    name: 'Ivy Admin',
-    email: 'ivy@admin.com',
-    avatar: 'https://randomuser.me/api/portraits/women/18.jpg',
-  },
-  {
-    id: 10,
-    name: 'Jack Admin',
-    email: 'jack@admin.com',
-    avatar: 'https://randomuser.me/api/portraits/men/19.jpg',
-  },
-  {
-    id: 11,
-    name: 'Kate Admin',
-    email: 'kate@admin.com',
-    avatar: 'https://randomuser.me/api/portraits/women/20.jpg',
-  },
-];
+const ADMINS_PER_PAGE = 10;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ADMIN_ROLES = new Set(['ADMIN', 'SUPER_ADMIN']);
 
-const AdminMembers = () => {
-  const [search, setSearch] = useState('');
-  const [menuOpen, setMenuOpen] = useState(null);
-  const [removeModal, setRemoveModal] = useState(false);
-  const [removeAdmin, setRemoveAdmin] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [emailInput, setEmailInput] = useState('');
-  const [emailError, setEmailError] = useState('');
+const roleKey = (role) => (role || '').toUpperCase();
+const hasAdminRole = (role) => ADMIN_ROLES.has(roleKey(role));
+const normaliseStatus = (status) => (status || '').toLowerCase();
 
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const adminsPerPage = 10;
+const formatDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
 
-  const filteredAdmins = mockAdmins.filter(
-    admin =>
-      admin.name.toLowerCase().includes(search.toLowerCase()) ||
-      admin.email.toLowerCase().includes(search.toLowerCase())
-  );
+const getDisplayName = (admin) =>
+  admin?.full_name || admin?.username || admin?.email || 'Admin';
 
-  const totalPages = Math.ceil(filteredAdmins.length / adminsPerPage);
-  const paginatedAdmins = filteredAdmins.slice(
-    (currentPage - 1) * adminsPerPage,
-    currentPage * adminsPerPage
-  );
-
-  const handlePageChange = (page) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
+const sortAdmins = (list) => {
+  const roleWeight = (role) => (roleKey(role) === 'SUPER_ADMIN' ? 0 : 1);
+  const statusWeight = (status) => (normaliseStatus(status) === 'pending' ? 0 : 1);
+  return [...list].sort((a, b) => {
+    const roleDelta = roleWeight(a.role) - roleWeight(b.role);
+    if (roleDelta !== 0) {
+      return roleDelta;
     }
-  };
+    const statusDelta = statusWeight(a.status) - statusWeight(b.status);
+    if (statusDelta !== 0) {
+      return statusDelta;
+    }
+    return getDisplayName(a).localeCompare(getDisplayName(b));
+  });
+};
 
-  // Reset to first page when search changes
-  React.useEffect(() => {
+const AdminMembers = ({ currentUser }) => {
+  const [admins, setAdmins] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addName, setAddName] = useState('');
+  const [addEmail, setAddEmail] = useState('');
+  const [addRole, setAddRole] = useState('ADMIN');
+  const [addError, setAddError] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const [addResult, setAddResult] = useState(null);
+  const [editModal, setEditModal] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editRole, setEditRole] = useState('ADMIN');
+  const [editError, setEditError] = useState('');
+  const [isEditSaving, setIsEditSaving] = useState(false);
+  const [removeModal, setRemoveModal] = useState(null);
+  const [removeInput, setRemoveInput] = useState('');
+  const [removeError, setRemoveError] = useState('');
+  const [isRemoving, setIsRemoving] = useState(false);
+
+  const currentRole = roleKey(currentUser?.role);
+  const isSuperAdmin = currentRole === 'SUPER_ADMIN';
+
+  useEffect(() => {
+    let isActive = true;
+    const fetchAdmins = async () => {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const data = await getUsers();
+        if (!isActive) return;
+        const userList = Array.isArray(data) ? data : [];
+        const adminList = sortAdmins(
+          userList.filter((user) => hasAdminRole(user.role))
+        );
+        setAdmins(adminList);
+      } catch (err) {
+        if (!isActive) return;
+        const message =
+          err?.response?.data?.error ||
+          err?.message ||
+          'Unable to load administrators.';
+        setLoadError(message);
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchAdmins();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     setCurrentPage(1);
   }, [search]);
 
-  const handleRemoveAdmin = () => {
-    setRemoveModal(false);
-    alert('Admin removed: ' + (removeAdmin?.name || ''));
-    setRemoveAdmin(null);
-  };
+  const filteredAdmins = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) {
+      return admins;
+    }
+    return admins.filter((admin) => {
+      const name = (admin.full_name || '').toLowerCase();
+      const username = (admin.username || '').toLowerCase();
+      const email = (admin.email || '').toLowerCase();
+      const role = roleKey(admin.role).toLowerCase();
+      return (
+        name.includes(term) ||
+        username.includes(term) ||
+        email.includes(term) ||
+        role.includes(term)
+      );
+    });
+  }, [admins, search]);
 
-  const handleAddAdmin = () => {
-    if (!emailInput.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-      setEmailError('Please enter a valid email address.');
+  const totalPages = Math.ceil(filteredAdmins.length / ADMINS_PER_PAGE);
+  const paginatedAdmins = filteredAdmins.slice(
+    (currentPage - 1) * ADMINS_PER_PAGE,
+    currentPage * ADMINS_PER_PAGE
+  );
+
+  const pendingCount = admins.filter(
+    (admin) => normaliseStatus(admin.status) === 'pending'
+  ).length;
+
+const resetAddForm = () => {
+  setAddName('');
+  setAddEmail('');
+  setAddRole('ADMIN');
+  setAddError('');
+};
+
+const handleAddAdmin = async () => {
+  const trimmedName = addName.trim();
+  const trimmedEmail = addEmail.trim().toLowerCase();
+  const roleValue = roleKey(addRole) === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'ADMIN';
+
+  if (!trimmedName) {
+    setAddError('Administrator name is required.');
+    return;
+  }
+  if (!trimmedEmail || !EMAIL_REGEX.test(trimmedEmail)) {
+    setAddError('Please enter a valid email address.');
+    return;
+  }
+
+  setAddError('');
+  setIsAdding(true);
+
+  try {
+    const response = await inviteAdminApi({
+      full_name: trimmedName,
+      email: trimmedEmail,
+      role: roleValue,
+    });
+    const newAdmin = response?.admin;
+    const temporaryPassword = response?.temporary_password;
+
+    if (!newAdmin) {
+      setAddError('Invitation response was empty. Please try again.');
       return;
     }
-    setEmailError('');
-    setShowModal(false);
-    setEmailInput('');
-    alert('Admin invite processed for: ' + emailInput);
+
+    setAdmins((prev) =>
+      sortAdmins([
+        newAdmin,
+        ...prev.filter((admin) => admin.id !== newAdmin.id),
+      ])
+    );
+
+    setCurrentPage(1);
+    setAddResult({
+      name: getDisplayName(newAdmin),
+      email: newAdmin.email,
+      username: newAdmin.username,
+      password: temporaryPassword,
+      role: roleKey(newAdmin.role),
+    });
+    setShowAddModal(false);
+    resetAddForm();
+  } catch (err) {
+    const message =
+      err?.response?.data?.error ||
+      err?.message ||
+      'Unable to create administrator. Please try again.';
+    setAddError(message);
+  } finally {
+    setIsAdding(false);
+  }
+};
+
+const openEditModal = (admin) => {
+  if (!isSuperAdmin) return;
+  setEditModal(admin);
+  setEditName(admin.full_name || admin.username || '');
+  setEditEmail(admin.email || '');
+  setEditRole(roleKey(admin.role) === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'ADMIN');
+  setEditError('');
+};
+
+const closeEditModal = () => {
+  setEditModal(null);
+  setEditName('');
+  setEditEmail('');
+  setEditRole('ADMIN');
+  setEditError('');
+  setIsEditSaving(false);
+};
+
+const handleSaveEdit = async () => {
+  if (!editModal) return;
+  const trimmedName = editName.trim();
+  const trimmedEmail = editEmail.trim().toLowerCase();
+  const roleValue = roleKey(editRole) === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'ADMIN';
+
+  if (!trimmedName) {
+    setEditError('Administrator name cannot be empty.');
+    return;
+  }
+  if (!trimmedEmail || !EMAIL_REGEX.test(trimmedEmail)) {
+    setEditError('Please enter a valid email address.');
+    return;
+  }
+
+  setEditError('');
+  setIsEditSaving(true);
+  try {
+    const updated = await updateUserApi(editModal.id, {
+      full_name: trimmedName,
+      email: trimmedEmail,
+      role: roleValue,
+    });
+    setAdmins((prev) =>
+      sortAdmins(
+        prev.map((admin) =>
+          admin.id === updated.id ? { ...admin, ...updated } : admin
+        )
+      )
+    );
+    closeEditModal();
+  } catch (err) {
+    const message =
+      err?.response?.data?.error ||
+      err?.message ||
+      'Unable to update administrator. Please try again.';
+    setEditError(message);
+    setIsEditSaving(false);
+  }
+};
+
+const openRemoveModal = (admin) => {
+  if (!isSuperAdmin || !admin) return;
+  if (admin.id === currentUser?.id) {
+    return;
+  }
+  const code = String(Math.floor(1000 + Math.random() * 9000));
+  setRemoveModal({ admin, code });
+  setRemoveInput('');
+  setRemoveError('');
+  setIsRemoving(false);
+};
+
+const closeRemoveModal = () => {
+  setRemoveModal(null);
+  setRemoveInput('');
+  setRemoveError('');
+  setIsRemoving(false);
+};
+
+const handleConfirmRemove = async () => {
+  if (!removeModal) return;
+  if (removeInput.trim() !== removeModal.code) {
+    setRemoveError('Verification code does not match.');
+    return;
+  }
+  setIsRemoving(true);
+  try {
+    await deleteUserApi(removeModal.admin.id);
+    setAdmins((prev) =>
+      sortAdmins(
+        prev.filter((admin) => admin.id !== removeModal.admin.id)
+      )
+    );
+    closeRemoveModal();
+  } catch (err) {
+    const message =
+      err?.response?.data?.error ||
+      err?.message ||
+      'Unable to remove administrator. Please try again.';
+    setRemoveError(message);
+    setIsRemoving(false);
+  }
+};
+
+const handlePageChange = (page) => {
+  if (page >= 1 && page <= totalPages) {
+    setCurrentPage(page);
+  }
+};
+
+const renderAvatar = (admin) => {
+    const displayName = getDisplayName(admin);
+    const avatarUrl = admin.avatar_url;
+    const initial = (displayName || 'A').trim().charAt(0).toUpperCase();
+    if (avatarUrl) {
+      return (
+        <img
+          src={avatarUrl}
+          alt={displayName}
+          className="student-avatar"
+        />
+      );
+    }
+    return (
+      <div className="student-avatar student-avatar-fallback" aria-hidden="true">
+        {initial || 'A'}
+      </div>
+    );
+  };
+
+  const renderContent = () => {
+    if (isLoading) {
+      return <div className="student-placeholder">Loading administrators…</div>;
+    }
+    if (loadError) {
+      return (
+        <div className="student-placeholder student-placeholder-error">
+          {loadError}
+        </div>
+      );
+    }
+    if (filteredAdmins.length === 0) {
+      return <div className="student-placeholder">No administrators found.</div>;
+    }
+    return paginatedAdmins.map((admin) => {
+      const displayName = getDisplayName(admin);
+      const email = admin.email || '—';
+      const roleLabel =
+        roleKey(admin.role) === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin';
+      const status = normaliseStatus(admin.status);
+      const isPending = status === 'pending';
+      const invitedAt = formatDate(admin.invited_at);
+      const lastLogin = formatDate(admin.last_login_at);
+      const isSelf = admin.id === currentUser?.id;
+
+      return (
+        <div
+          key={admin.id || `${email}-${displayName}`}
+          className={`student-row${isPending ? ' pending' : ''}`}
+        >
+          {renderAvatar(admin)}
+          <div className="student-info">
+            <div className="student-name-row">
+              <div className="student-name">{displayName}</div>
+              <span className="student-status-tag">{roleLabel}</span>
+              {isPending && (
+                <span className="student-status-tag pending">Pending</span>
+              )}
+            </div>
+            <div className="student-email">{email}</div>
+            <div className="student-meta">
+              {admin.username && (
+                <span className="student-meta-item">
+                  Username: {admin.username}
+                </span>
+              )}
+              {isPending && invitedAt && (
+                <span className="student-meta-item">Invited {invitedAt}</span>
+              )}
+              {!isPending && lastLogin && (
+                <span className="student-meta-item">Last login {lastLogin}</span>
+              )}
+              {status && !isPending && (
+                <span className="student-meta-item">
+                  Status: {status.replace(/_/g, ' ')}
+                </span>
+              )}
+            </div>
+          </div>
+          {isSuperAdmin && (
+            <div className="student-actions">
+              <button
+                type="button"
+                className="student-action-button edit"
+                onClick={() => openEditModal(admin)}
+                title="Edit administrator"
+              >
+                <span className="student-action-icon" aria-hidden="true">
+                  ✏️
+                </span>
+                <span className="visually-hidden">Edit</span>
+              </button>
+              <button
+                type="button"
+                className="student-action-button remove"
+                onClick={() => openRemoveModal(admin)}
+                title={
+                  isSelf
+                    ? 'You cannot remove your own administrator account'
+                    : 'Remove administrator'
+                }
+                disabled={isSelf}
+              >
+                <span className="student-action-icon" aria-hidden="true">
+                  🗑️
+                </span>
+                <span className="visually-hidden">Remove</span>
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    });
   };
 
   return (
     <div className="admin-students-bg">
       <div className="admin-students-container">
         <div className="admin-students-header">
-          <h2 className="admin-students-title">Admins</h2>
+          <div>
+            <h2 className="admin-students-title">Administrators</h2>
+            <div className="admin-students-subtitle">
+              {pendingCount > 0
+                ? `${pendingCount} admin${
+                    pendingCount === 1 ? ' is' : 's are'
+                  } pending activation.`
+                : 'All administrators are active.'}
+            </div>
+            {!isSuperAdmin && (
+              <div className="admin-students-subtitle">
+                You have read-only access to administrator details.
+              </div>
+            )}
+          </div>
           <div className="admin-students-actions">
             <div className="admin-students-search">
-              <span className="admin-students-search-icon">
-                &#128269;
-              </span>
+              <span className="admin-students-search-icon">&#128269;</span>
               <input
                 type="text"
-                placeholder="Search admin"
+                placeholder="Search administrator"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={(e) => setSearch(e.target.value)}
                 className="admin-students-search-input"
               />
             </div>
+            {isSuperAdmin && (
+              <button
+                className="admin-students-add-btn"
+                onClick={() => {
+                  resetAddForm();
+                  setShowAddModal(true);
+                }}
+              >
+                <span className="admin-students-add-icon">+</span>
+                Add Admin
+              </button>
+            )}
+          </div>
+        </div>
+
+        {addResult && (
+          <div className="admin-feedback success" role="status">
+            <strong>Administrator created.</strong>{' '}
+            {addResult.name} has been added as a{' '}
+            {addResult.role === 'SUPER_ADMIN'
+              ? 'super administrator'
+              : 'administrator'}
+            .
+            {addResult.username && (
+              <div className="admin-feedback-password">
+                Username: <code>{addResult.username}</code>
+              </div>
+            )}
+            {addResult.password && (
+              <div className="admin-feedback-password">
+                Temporary password: <code>{addResult.password}</code>
+              </div>
+            )}
             <button
-              className="admin-students-add-btn"
-              onClick={() => setShowModal(true)}
+              type="button"
+              className="admin-feedback-dismiss"
+              onClick={() => setAddResult(null)}
             >
-              <span className="admin-students-add-icon">+</span>
-              Add Admin
+              &times;
             </button>
           </div>
-        </div>
+        )}
+
         <div className="admin-students-table student-table-scroll">
           <div className="admin-students-table-header">
-            <div className="admin-students-table-header-left">
-              <span className="admin-students-table-header-label">
-                User Name
-              </span>
-            </div>
             <div className="admin-students-table-header-count">
-              {filteredAdmins.length} Admins
+              {filteredAdmins.length} Administrators
             </div>
-            <span className="admin-students-table-header-label">
-              Action
-            </span>
           </div>
-          <div>
-            {paginatedAdmins.map((admin, idx) => (
-              <div key={admin.id} className="student-row">
-                <img
-                  src={admin.avatar}
-                  alt={admin.name}
-                  className="student-avatar"
-                />
-                <div className="student-info">
-                  <div className="student-name">{admin.name}</div>
-                  <div className="student-email">
-                    {admin.email}
-                  </div>
-                </div>
-                <div className="student-action">
-                  <button
-                    className="student-action-btn"
-                    onClick={() =>
-                      setMenuOpen(menuOpen === idx ? null : idx)
-                    }
-                  >
-                    &#8942;
-                  </button>
-                  {menuOpen === idx && (
-                    <div className="student-action-menu">
-                      <button
-                        onClick={() => {
-                          setRemoveAdmin(admin);
-                          setRemoveModal(true);
-                          setMenuOpen(null);
-                        }}
-                      >
-                        Remove Admin
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          <div>{renderContent()}</div>
         </div>
-        {/* Pagination Controls */}
+
         {totalPages > 1 && (
           <div className="pagination-controls">
             <button
@@ -218,7 +525,9 @@ const AdminMembers = () => {
             {Array.from({ length: totalPages }, (_, i) => (
               <button
                 key={i + 1}
-                className={`pagination-btn${currentPage === i + 1 ? ' pagination-btn-active' : ''}`}
+                className={`pagination-btn${
+                  currentPage === i + 1 ? ' pagination-btn-active' : ''
+                }`}
                 onClick={() => handlePageChange(i + 1)}
                 aria-current={currentPage === i + 1 ? 'page' : undefined}
               >
@@ -234,69 +543,170 @@ const AdminMembers = () => {
             </button>
           </div>
         )}
-        {showModal && (
+
+        {showAddModal && isSuperAdmin && (
           <div className="modal-overlay">
             <div className="modal">
               <h3>Add Admin</h3>
-              <p>Enter the admin's email address to invite:</p>
+              <p>Provide the administrator details to create their account.</p>
+              <input
+                type="text"
+                className="admin-modal-input"
+                placeholder="Full Name"
+                value={addName}
+                onChange={(e) => {
+                  setAddName(e.target.value);
+                  setAddError('');
+                }}
+                disabled={isAdding}
+              />
               <input
                 type="email"
                 className="admin-modal-input"
                 placeholder="admin@email.com"
-                value={emailInput}
-                onChange={e => {
-                  setEmailInput(e.target.value);
-                  setEmailError('');
+                value={addEmail}
+                onChange={(e) => {
+                  setAddEmail(e.target.value);
+                  setAddError('');
                 }}
+                disabled={isAdding}
               />
-              {emailError && (
-                <div className="modal-error">
-                  {emailError}
-                </div>
-              )}
+              <select
+                className="admin-modal-input"
+                value={addRole}
+                onChange={(e) => setAddRole(e.target.value)}
+                disabled={isAdding}
+              >
+                <option value="ADMIN">Administrator</option>
+                <option value="SUPER_ADMIN">Super Administrator</option>
+              </select>
+              {addError && <div className="modal-error">{addError}</div>}
               <div className="modal-info">
-                Clicking the proceed button will add this Admin into the entire system. Proceed?
+                A username and temporary password will be generated
+                automatically. Share the credentials securely with the
+                administrator.
               </div>
               <div className="modal-actions">
                 <button
                   className="btn"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    resetAddForm();
+                  }}
+                  disabled={isAdding}
                 >
                   Cancel
                 </button>
                 <button
                   className="admin-students-add-btn modal-process-btn"
                   onClick={handleAddAdmin}
+                  disabled={isAdding}
                 >
-                  Process
+                  {isAdding ? 'Processing…' : 'Process'}
                 </button>
               </div>
             </div>
           </div>
         )}
-        {removeModal && (
+
+        {editModal && isSuperAdmin && (
           <div className="modal-overlay">
             <div className="modal">
-              <h3>Remove Admin</h3>
-              <p>
-                Are you sure you want to remove{' '}
-                <strong>{removeAdmin?.name}</strong> from the system?
-              </p>
-              <div className="modal-warning">
-                This action cannot be undone.
+              <h3>Edit Admin Info</h3>
+              <input
+                type="text"
+                className="admin-modal-input"
+                placeholder="Full Name"
+                value={editName}
+                onChange={(e) => {
+                  setEditName(e.target.value);
+                  setEditError('');
+                }}
+                disabled={isEditSaving}
+              />
+              <input
+                type="email"
+                className="admin-modal-input"
+                placeholder="admin@email.com"
+                value={editEmail}
+                onChange={(e) => {
+                  setEditEmail(e.target.value);
+                  setEditError('');
+                }}
+                disabled={isEditSaving}
+              />
+              <select
+                className="admin-modal-input"
+                value={editRole}
+                onChange={(e) => setEditRole(e.target.value)}
+                disabled={isEditSaving}
+              >
+                <option value="ADMIN">Administrator</option>
+                <option value="SUPER_ADMIN">Super Administrator</option>
+              </select>
+              {editError && <div className="modal-error">{editError}</div>}
+              <div className="modal-info">
+                Saving changes updates the administrator across the system.
               </div>
               <div className="modal-actions">
                 <button
                   className="btn"
-                  onClick={() => setRemoveModal(false)}
+                  onClick={closeEditModal}
+                  disabled={isEditSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="admin-students-add-btn modal-process-btn"
+                  onClick={handleSaveEdit}
+                  disabled={isEditSaving}
+                >
+                  {isEditSaving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {removeModal && isSuperAdmin && (
+          <div className="modal-overlay">
+            <div className="modal">
+              <h3>Remove Admin</h3>
+              <p>
+                Enter the verification code to remove{' '}
+                <strong>{getDisplayName(removeModal.admin)}</strong> from the
+                system.
+              </p>
+              <div className="verification-code">{removeModal.code}</div>
+              <input
+                type="text"
+                className="admin-modal-input"
+                placeholder="Enter verification code"
+                value={removeInput}
+                onChange={(e) => {
+                  setRemoveInput(e.target.value);
+                  setRemoveError('');
+                }}
+                disabled={isRemoving}
+              />
+              {removeError && <div className="modal-error">{removeError}</div>}
+              <div className="modal-warning">This action cannot be undone.</div>
+              <div className="modal-actions">
+                <button
+                  className="btn"
+                  onClick={closeRemoveModal}
+                  disabled={isRemoving}
                 >
                   Cancel
                 </button>
                 <button
                   className="btn btn-danger"
-                  onClick={handleRemoveAdmin}
+                  onClick={handleConfirmRemove}
+                  disabled={
+                    isRemoving || removeInput.trim() !== removeModal.code
+                  }
                 >
-                  Remove
+                  {isRemoving ? 'Removing…' : 'Remove'}
                 </button>
               </div>
             </div>
