@@ -8,6 +8,7 @@ import AdminStatistics from './AdminStatistics';
 import AdminSettings from './AdminSettings';
 import AdminReportIncident from './AdminReportIncident';
 import youMatterLogo from '../../assets/YouMatter_logo_bg_removed.png';
+import { toAbsoluteUrl } from '../../services/api';
 import './admin.css';
 
 const navItems = [
@@ -20,7 +21,15 @@ const navItems = [
   { label: 'Logout', icon: '↩️', section: 'logout', path: '/login' },
 ];
 
-const AdminDashboard = ({ currentUser, complaints, complaintsLoading, complaintsError, onRefreshComplaints }) => {
+const AdminDashboard = ({
+  currentUser,
+  complaints,
+  complaintsLoading,
+  complaintsError,
+  onRefreshComplaints,
+  onUserUpdate,
+  onLogout,
+}) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState('dashboard');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false); // <--- added state
@@ -39,12 +48,20 @@ const AdminDashboard = ({ currentUser, complaints, complaintsLoading, complaints
 
   const confirmLogout = () => {
     setShowLogoutConfirm(false);
+    if (typeof onLogout === 'function') {
+      onLogout();
+      return;
+    }
     navigate('/login');
   };
 
   const cancelLogout = () => {
     setShowLogoutConfirm(false);
   };
+
+  const avatarLabel = (currentUser?.full_name || currentUser?.username || currentUser?.email || 'Admin').trim();
+  const avatarInitial = avatarLabel.charAt(0).toUpperCase();
+  const avatarSrc = currentUser?.avatar_url ? toAbsoluteUrl(currentUser.avatar_url) : null;
 
   // Sync activeSection with location (supports direct linking / refresh)
   useEffect(() => {
@@ -104,7 +121,17 @@ const AdminDashboard = ({ currentUser, complaints, complaintsLoading, complaints
           <img src={youMatterLogo} alt="YouMatter Logo" className="logo-img" />
         </div>
         <div className="admin-header-right">
-          <img src="https://randomuser.me/api/portraits/women/1.jpg" alt="Admin" className="admin-avatar" />
+          {avatarSrc ? (
+            <img
+              src={avatarSrc}
+              alt={avatarLabel}
+              className="admin-avatar"
+            />
+          ) : (
+            <div className="admin-avatar admin-avatar--fallback" aria-hidden="true">
+              {avatarInitial}
+            </div>
+          )}
         </div>
       </header>
 
@@ -163,7 +190,15 @@ const AdminDashboard = ({ currentUser, complaints, complaintsLoading, complaints
             element={<AdminMembers currentUser={currentUser} />}
           />
           <Route path="statistics" element={<AdminStatistics />} />
-          <Route path="settings" element={<AdminSettings />} />
+          <Route
+            path="settings"
+            element={
+              <AdminSettings
+                currentUser={currentUser}
+                onUserUpdate={onUserUpdate}
+              />
+            }
+          />
         </Routes>
       </div>
     </div>
