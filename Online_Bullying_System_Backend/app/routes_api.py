@@ -1,10 +1,12 @@
 import base64
 import binascii
 import os
+import re
+import secrets
 import time
 from flask import Blueprint, jsonify, request, current_app, send_from_directory
 from werkzeug.utils import secure_filename
-from app.models import User, UserStatus, db, now_kuala_lumpur
+from app.models import User, UserStatus, UserRole, db, now_kuala_lumpur
 from app.crud.user import get_all_users, get_user_by_id, create_user, update_user, delete_user
 from app.crud.complaint import (
     create_complaint,
@@ -30,8 +32,20 @@ from app.crud.admins import (
     AdminInviteError,
     AdminDataError,
 )
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 
 api_bp = Blueprint("api", __name__)
+
+
+_USERNAME_SANITIZE_PATTERN = re.compile(r"[^a-zA-Z0-9._-]")
+
+
+def _sanitize_username(value: str) -> str:
+    value = (value or "").strip().lower()
+    sanitized = _USERNAME_SANITIZE_PATTERN.sub("", value)
+    sanitized = sanitized.strip("._-")
+    return sanitized or "user"
 
 @api_bp.route("/users", methods=["GET"])
 def api_get_users():
@@ -288,6 +302,77 @@ def api_login():
     updated = True
     if updated:
         db.session.commit()
+    return jsonify(user.to_dict()), 200
+
+
+@api_bp.route("/auth/google", methods=["POST"])
+def api_google_login():
+    data = request.get_json() or {}
+    token = data.get("token")
+    if not token:
+        return jsonify({"error": "Missing Google token"}), 400
+
+    client_id = current_app.config.get("GOOGLE_CLIENT_ID") or os.getenv("GOOGLE_CLIENT_ID")
+    if not client_id:
+        current_app.logger.error("Google Sign-In attempted but GOOGLE_CLIENT_ID is not configured.")
+        return jsonify({"error": "Google Sign-In is not available."}), 503
+
+    try:
+        id_info = google_id_token.verify_oauth2_token(token, google_requests.Request(), client_id)
+    except ValueError as exc:
+        current_app.logger.warning("Invalid Google ID token: %s", exc)
+        return jsonify({"error": "Invalid Google token"}), 401
+
+    email = id_info.get("email")
+    if not email:
+        return jsonify({"error": "Google account is missing an email address."}), 400
+
+    if not id_info.get("email_verified", True):
+        return jsonify({"error": "Google email address is not verified."}), 403
+
+    full_name = id_info.get("name") or ""
+    preferred_username = id_info.get("preferred_username") or ""
+    google_sub = id_info.get("sub") or ""
+    picture = id_info.get("picture")
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        base_username = preferred_username or email.split("@")[0] or f"user_{google_sub[:8]}"
+        base_candidate = _sanitize_username(base_username)
+        candidate = base_candidate
+        suffix = 1
+        while User.query.filter_by(username=candidate).first():
+            candidate = f"{base_candidate}{suffix}"
+            suffix += 1
+
+        user = User(
+            username=candidate,
+            email=email,
+            role=UserRole.STUDENT,
+            full_name=full_name or None,
+            avatar_url=picture or None,
+            status=UserStatus.ACTIVE.value,
+            invited_at=now_kuala_lumpur(),
+        )
+        user.set_password(secrets.token_urlsafe(24))
+        current_app.logger.info("Created new user via Google Sign-In email=%s username=%s", email, candidate)
+        db.session.add(user)
+    else:
+        updated = False
+        if full_name and user.full_name != full_name:
+            user.full_name = full_name
+            updated = True
+        if picture and user.avatar_url != picture:
+            user.avatar_url = picture
+            updated = True
+        if (user.status or "").lower() == UserStatus.PENDING.value:
+            user.status = UserStatus.ACTIVE.value
+            updated = True
+        if updated:
+            current_app.logger.info("Updated Google profile details for user id=%s", user.id)
+
+    user.last_login_at = now_kuala_lumpur()
+    db.session.commit()
     return jsonify(user.to_dict()), 200
 
 

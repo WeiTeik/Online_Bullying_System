@@ -21,6 +21,11 @@ export async function login(identifier, password) {
   return res.data;
 }
 
+export async function loginWithGoogle(idToken) {
+  const res = await api.post("/auth/google", { token: idToken });
+  return res.data;
+}
+
 // Users
 export async function getUsers() {
   const res = await api.get("/users");

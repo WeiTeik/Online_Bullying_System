@@ -7,7 +7,7 @@ import { ComplaintStatus } from './components/CheckStatus';
 import { Resources } from './components/Resources';
 import StudentProfilePage from './components/StudentProfilePage';
 import AdminDashboard from './components/admin/AdminDashboard';
-import { login as loginRequest, toAbsoluteUrl, getComplaints, addComplaintComment } from './services/api';
+import { login as loginRequest, toAbsoluteUrl, getComplaints, addComplaintComment, loginWithGoogle } from './services/api';
 import './App.css';
 
 const LOCAL_STORAGE_USER_KEY = 'obs.currentUser';
@@ -110,6 +110,38 @@ function App() {
         err?.response?.data?.error ||
         err?.message ||
         'Unable to login. Please try again.'
+      setAuthError(message)
+    } finally {
+      setIsAuthLoading(false)
+    }
+  }
+
+  const handleGoogleLogin = async (idToken) => {
+    if (!idToken) {
+      setAuthError('Unable to authenticate with Google. Please try again.')
+      return
+    }
+    setIsAuthLoading(true)
+    setAuthError(null)
+    try {
+      const user = await loginWithGoogle(idToken)
+      setCurrentUser(user)
+      setShowLogin(false)
+      setShowUserMenu(false)
+      const landingPath = getRoleLandingPath(user)
+      const nextRoute =
+        isAdminUser(user)
+          ? landingPath
+          : pendingRoute && !pendingRoute.startsWith('/admin')
+            ? pendingRoute
+            : landingPath
+      navigate(nextRoute)
+      setPendingRoute(null)
+    } catch (err) {
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        'Unable to login with Google. Please try again.'
       setAuthError(message)
     } finally {
       setIsAuthLoading(false)
@@ -438,6 +470,8 @@ function App() {
                   onLogin={handleLogin}
                   error={authError}
                   isLoading={isAuthLoading}
+                  onGoogleLogin={handleGoogleLogin}
+                  onAuthError={setAuthError}
                 />
               )
             }
@@ -470,6 +504,8 @@ function App() {
             onClose={handleCloseLoginModal}
             error={authError}
             isLoading={isAuthLoading}
+            onGoogleLogin={handleGoogleLogin}
+            onAuthError={setAuthError}
           />
         )}
       </main>
