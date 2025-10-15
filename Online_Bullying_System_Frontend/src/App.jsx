@@ -7,7 +7,14 @@ import { ComplaintStatus } from './components/CheckStatus';
 import { Resources } from './components/Resources';
 import StudentProfilePage from './components/StudentProfilePage';
 import AdminDashboard from './components/admin/AdminDashboard';
-import { login as loginRequest, toAbsoluteUrl, getComplaints, addComplaintComment, loginWithGoogle } from './services/api';
+import {
+  login as loginRequest,
+  toAbsoluteUrl,
+  getComplaints,
+  addComplaintComment,
+  loginWithGoogle,
+  verifyTwoFactor,
+} from './services/api';
 import './App.css';
 
 const LOCAL_STORAGE_USER_KEY = 'obs.currentUser';
@@ -53,6 +60,9 @@ function App() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [isMobileView, setIsMobileView] = useState(false)
   const [complaintsVersion, setComplaintsVersion] = useState(0)
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState(null)
+  const [isTwoFactorLoading, setIsTwoFactorLoading] = useState(false)
+  const [twoFactorError, setTwoFactorError] = useState(null)
 
   // Add this inside App to get the current route
   const location = useLocation();
@@ -81,6 +91,28 @@ function App() {
     }
   }, [currentUser]);
 
+  const completeLogin = useCallback((user) => {
+    if (!user) {
+      return
+    }
+    setCurrentUser(user)
+    setShowLogin(false)
+    setShowUserMenu(false)
+    setTwoFactorChallenge(null)
+    setTwoFactorError(null)
+    setIsTwoFactorLoading(false)
+    setIsAuthLoading(false)
+    const landingPath = getRoleLandingPath(user)
+    const nextRoute =
+      isAdminUser(user)
+        ? landingPath
+        : pendingRoute && !pendingRoute.startsWith('/admin')
+          ? pendingRoute
+          : landingPath
+    navigate(nextRoute)
+    setPendingRoute(null)
+  }, [navigate, pendingRoute])
+
   const handleLogin = async (identifier, password) => {
     const trimmedIdentifier = identifier.trim()
     if (!trimmedIdentifier || !password) {
@@ -90,21 +122,19 @@ function App() {
 
     setIsAuthLoading(true)
     setAuthError(null)
+    setTwoFactorError(null)
 
     try {
-      const user = await loginRequest(trimmedIdentifier, password)
-      setCurrentUser(user)
-      setShowLogin(false)
-      setShowUserMenu(false)
-      const landingPath = getRoleLandingPath(user)
-      const nextRoute =
-        isAdminUser(user)
-          ? landingPath
-          : pendingRoute && !pendingRoute.startsWith('/admin')
-            ? pendingRoute
-            : landingPath
-      navigate(nextRoute)
-      setPendingRoute(null)
+      const response = await loginRequest(trimmedIdentifier, password)
+      if (response?.requires_two_factor) {
+        setTwoFactorChallenge({
+          challengeId: response.challenge_id,
+          email: response.email,
+          expiresIn: response.expires_in,
+        })
+        return
+      }
+      completeLogin(response)
     } catch (err) {
       const message =
         err?.response?.data?.error ||
@@ -116,6 +146,38 @@ function App() {
     }
   }
 
+  const handleVerifyTwoFactor = async (challengeId, code) => {
+    if (!challengeId) {
+      setTwoFactorError('Missing verification challenge.')
+      return
+    }
+    const trimmedCode = (code || '').trim()
+    if (!trimmedCode) {
+      setTwoFactorError('Please enter the verification code sent to your email.')
+      return
+    }
+    setIsTwoFactorLoading(true)
+    setTwoFactorError(null)
+    try {
+      const user = await verifyTwoFactor(challengeId, trimmedCode)
+      completeLogin(user)
+    } catch (err) {
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        'Unable to verify the code. Please try again.'
+      setTwoFactorError(message)
+    } finally {
+      setIsTwoFactorLoading(false)
+    }
+  }
+
+  const handleCancelTwoFactor = useCallback(() => {
+    setTwoFactorChallenge(null)
+    setTwoFactorError(null)
+    setIsTwoFactorLoading(false)
+  }, [])
+
   const handleGoogleLogin = async (idToken) => {
     if (!idToken) {
       setAuthError('Unable to authenticate with Google. Please try again.')
@@ -123,6 +185,7 @@ function App() {
     }
     setIsAuthLoading(true)
     setAuthError(null)
+    handleCancelTwoFactor()
     try {
       const user = await loginWithGoogle(idToken)
       setCurrentUser(user)
@@ -153,6 +216,7 @@ function App() {
     setPendingRoute(null)
     setIsMobileNavOpen(false)
     setShowUserMenu(false)
+    handleCancelTwoFactor()
     setShowLogin(true)
   }
 
@@ -160,6 +224,7 @@ function App() {
     setShowLogin(false)
     setAuthError(null)
     setPendingRoute(null)
+    handleCancelTwoFactor()
   }
 
   const handleLogout = () => {
@@ -170,6 +235,7 @@ function App() {
     setComplaintsError(null)
     setIsComplaintsLoading(false)
     setIsMobileNavOpen(false)
+    handleCancelTwoFactor()
     navigate('/home')
   }
 
@@ -472,6 +538,11 @@ function App() {
                   isLoading={isAuthLoading}
                   onGoogleLogin={handleGoogleLogin}
                   onAuthError={setAuthError}
+                  pendingTwoFactor={twoFactorChallenge}
+                  onVerifyTwoFactor={handleVerifyTwoFactor}
+                  twoFactorError={twoFactorError}
+                  isTwoFactorLoading={isTwoFactorLoading}
+                  onCancelTwoFactor={handleCancelTwoFactor}
                 />
               )
             }
@@ -506,6 +577,11 @@ function App() {
             isLoading={isAuthLoading}
             onGoogleLogin={handleGoogleLogin}
             onAuthError={setAuthError}
+            pendingTwoFactor={twoFactorChallenge}
+            onVerifyTwoFactor={handleVerifyTwoFactor}
+            twoFactorError={twoFactorError}
+            isTwoFactorLoading={isTwoFactorLoading}
+            onCancelTwoFactor={handleCancelTwoFactor}
           />
         )}
       </main>

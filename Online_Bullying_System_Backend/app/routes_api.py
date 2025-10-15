@@ -38,6 +38,17 @@ from app.crud.admins import (
 )
 from app.utils.passwords import generate_strong_password
 from app.utils.email import send_email
+from app.utils.two_factor import (
+    create_two_factor_challenge,
+    verify_two_factor_code,
+    cleanup_expired_challenges,
+    invalidate_two_factor_challenge,
+    CHALLENGE_TTL_SECONDS,
+    TwoFactorError,
+    TwoFactorExpiredError,
+    TwoFactorInvalidError,
+    TwoFactorTooManyAttemptsError,
+)
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 
@@ -60,6 +71,24 @@ def _user_display_name(user: User) -> str:
         if candidate:
             return candidate
     return "YouMatter User"
+
+
+def _mask_email(email: str) -> str:
+    if not email:
+        return ""
+    email = email.strip()
+    if "@" not in email:
+        return email
+    local, domain = email.split("@", 1)
+    if not local:
+        return f"*@{domain}"
+    if len(local) == 1:
+        masked_local = local[0] + "***"
+    elif len(local) == 2:
+        masked_local = f"{local[0]}*{local[1]}"
+    else:
+        masked_local = f"{local[0]}{'*' * (len(local) - 2)}{local[-1]}"
+    return f"{masked_local}@{domain}"
 
 
 def _send_password_reset_email(user: User, temporary_password: str) -> None:
@@ -112,6 +141,67 @@ def _send_password_reset_email(user: User, temporary_password: str) -> None:
     html_body = "\n".join(html_lines)
 
     send_email("YouMatter Temporary Password", email, text_body, html_body=html_body)
+
+
+def _send_two_factor_code_email(user: User, verification_code: str) -> None:
+    display_name = _user_display_name(user)
+    email = (user.email or "").strip()
+    if not email:
+        raise RuntimeError("User record is missing an email address; unable to send verification code.")
+
+    login_url = current_app.config.get("PORTAL_LOGIN_URL")
+    login_line = f"Login here: {login_url}" if login_url else ""
+
+    text_lines = [
+        f"Hi {display_name},",
+        "",
+        "For security purposes, we need to confirm it's really you.",
+        "Enter the six-digit verification code below to complete your sign-in:",
+        "",
+        f"Verification Code: {verification_code}",
+        "",
+        "This code will expire in 10 minutes. If you did not attempt to sign in, please contact your administrator immediately.",
+        login_line,
+        "",
+        "Regards,",
+        "YouMatter Security Team",
+    ]
+    text_body = "\n".join(line for line in text_lines if line)
+
+    safe_display_name = html_escape(display_name)
+    safe_code = html_escape(verification_code)
+    safe_login_url = html_escape(login_url) if login_url else None
+
+    html_lines = [
+        f"<p>Hi {safe_display_name},</p>",
+        "<p>For security purposes, we need to confirm it's really you.</p>",
+        "<p>Enter the six-digit code below to complete your sign-in:</p>",
+        f"<p style=\"font-size: 1.5rem; font-weight: bold; letter-spacing: 0.2rem;\">{safe_code}</p>",
+        "<p>This code will expire in 10 minutes.</p>",
+    ]
+    if safe_login_url:
+        html_lines.append(f'<p><a href="{safe_login_url}">Return to the YouMatter portal</a></p>')
+    html_lines.extend(
+        [
+            "<p>If you did not attempt to sign in, please contact your administrator immediately.</p>",
+            "<p>Regards,<br/>YouMatter Security Team</p>",
+        ]
+    )
+    html_body = "\n".join(html_lines)
+
+    send_email("Your YouMatter verification code", email, text_body, html_body=html_body)
+
+
+def _finalize_successful_login(user: User):
+    updated = False
+    if (user.status or "").lower() == UserStatus.PENDING.value:
+        user.status = UserStatus.ACTIVE.value
+        updated = True
+    user.last_login_at = now_kuala_lumpur()
+    updated = True
+    if updated:
+        db.session.commit()
+    return user.to_dict()
 
 @api_bp.route("/users", methods=["GET"])
 def api_get_users():
@@ -399,18 +489,50 @@ def api_login():
         current_app.logger.info("Login failed: bad password for user id=%s username=%s from %s", user.id, user.username, request.remote_addr)
         return jsonify({"error": "Invalid credentials"}), 401
 
+    cleanup_expired_challenges()
+    requires_two_factor = user.last_login_at is None
+
+    if requires_two_factor:
+        try:
+            challenge_id, verification_code = create_two_factor_challenge(user.id)
+        except Exception as exc:  # pylint: disable=broad-except
+            current_app.logger.exception("Failed to create two-factor challenge for user %s: %s", user.id, exc)
+            return jsonify({"error": "Unable to initiate two-factor verification. Please try again later."}), 503
+
+        try:
+            _send_two_factor_code_email(user, verification_code)
+        except Exception as exc:  # pylint: disable=broad-except
+            current_app.logger.exception("Failed to send verification code to %s: %s", user.email, exc)
+            invalidate_two_factor_challenge(challenge_id)
+            return jsonify({"error": "Unable to send verification code email. Please try again later."}), 503
+
+        masked_email = _mask_email(user.email)
+        current_app.logger.info(
+            "Two-factor verification required for user id=%s username=%s from %s",
+            user.id,
+            user.username,
+            request.remote_addr,
+        )
+        return (
+            jsonify(
+                {
+                    "requires_two_factor": True,
+                    "challenge_id": challenge_id,
+                    "email": masked_email,
+                    "expires_in": CHALLENGE_TTL_SECONDS,
+                    "message": "A verification code has been sent to your email address.",
+                }
+            ),
+            200,
+        )
+
     # success
     print(f"Login successful: user id={user.id} username={user.username} from {request.remote_addr}")
-    current_app.logger.info("Login successful: user id=%s username=%s from %s", user.id, user.username, request.remote_addr)
-    updated = False
-    if (user.status or "").lower() == UserStatus.PENDING.value:
-        user.status = UserStatus.ACTIVE.value
-        updated = True
-    user.last_login_at = now_kuala_lumpur()
-    updated = True
-    if updated:
-        db.session.commit()
-    return jsonify(user.to_dict()), 200
+    current_app.logger.info(
+        "Login successful: user id=%s username=%s from %s", user.id, user.username, request.remote_addr
+    )
+    user_dict = _finalize_successful_login(user)
+    return jsonify(user_dict), 200
 
 
 @api_bp.route("/auth/google", methods=["POST"])
@@ -482,6 +604,42 @@ def api_google_login():
     user.last_login_at = now_kuala_lumpur()
     db.session.commit()
     return jsonify(user.to_dict()), 200
+
+
+@api_bp.route("/auth/verify-2fa", methods=["POST"])
+def api_verify_two_factor():
+    data = request.get_json() or {}
+    challenge_id = (data.get("challenge_id") or "").strip()
+    code = (data.get("code") or "").strip()
+
+    if not challenge_id or not code:
+        return jsonify({"error": "Verification code is required."}), 400
+
+    try:
+        user_id = verify_two_factor_code(challenge_id, code)
+    except TwoFactorExpiredError as exc:
+        return jsonify({"error": str(exc), "reason": "expired"}), 400
+    except TwoFactorTooManyAttemptsError as exc:
+        return jsonify({"error": str(exc), "reason": "locked"}), 400
+    except TwoFactorInvalidError as exc:
+        return jsonify({"error": str(exc), "reason": "invalid"}), 400
+    except TwoFactorError as exc:  # pragma: no cover - catch-all safeguard
+        current_app.logger.exception("Unexpected two-factor verification failure: %s", exc)
+        return jsonify({"error": "Unable to verify the code at this time."}), 503
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User account not found."}), 404
+
+    print(f"Two-factor verification successful: user id={user.id} username={user.username} from {request.remote_addr}")
+    current_app.logger.info(
+        "Two-factor verification successful: user id=%s username=%s from %s",
+        user.id,
+        user.username,
+        request.remote_addr,
+    )
+    user_dict = _finalize_successful_login(user)
+    return jsonify(user_dict), 200
 
 
 def _detect_extension_from_header(header: str) -> str:
