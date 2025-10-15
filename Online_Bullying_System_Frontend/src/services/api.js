@@ -21,6 +21,11 @@ export async function login(identifier, password) {
   return res.data;
 }
 
+export async function requestPasswordReset(email) {
+  const res = await api.post("/auth/forgot-password", { email });
+  return res.data;
+}
+
 export async function loginWithGoogle(idToken) {
   const res = await api.post("/auth/google", { token: idToken });
   return res.data;

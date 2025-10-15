@@ -4,7 +4,10 @@ import os
 import re
 import secrets
 import time
+from html import escape as html_escape
 from flask import Blueprint, jsonify, request, current_app, send_from_directory
+from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.utils import secure_filename
 from app.models import User, UserStatus, UserRole, db, now_kuala_lumpur
 from app.crud.user import get_all_users, get_user_by_id, create_user, update_user, delete_user
@@ -33,6 +36,8 @@ from app.crud.admins import (
     AdminInviteError,
     AdminDataError,
 )
+from app.utils.passwords import generate_strong_password
+from app.utils.email import send_email
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 
@@ -47,6 +52,66 @@ def _sanitize_username(value: str) -> str:
     sanitized = _USERNAME_SANITIZE_PATTERN.sub("", value)
     sanitized = sanitized.strip("._-")
     return sanitized or "user"
+
+
+def _user_display_name(user: User) -> str:
+    for candidate in (user.full_name, user.username, user.email):
+        candidate = (candidate or "").strip()
+        if candidate:
+            return candidate
+    return "YouMatter User"
+
+
+def _send_password_reset_email(user: User, temporary_password: str) -> None:
+    display_name = _user_display_name(user)
+    email = (user.email or "").strip()
+    login_url = current_app.config.get("PORTAL_LOGIN_URL")
+    login_line = f"Login here: {login_url}" if login_url else ""
+
+    text_lines = [
+        f"Hi {display_name},",
+        "",
+        "We received a request to reset your YouMatter portal password.",
+        "Use the temporary password below to sign in:",
+        f"Email: {email}",
+        f"Temporary Password: {temporary_password}",
+        "",
+        "Please change your password immediately after logging in.",
+        login_line,
+        "",
+        "If you did not request this reset, please contact your administrator right away.",
+        "",
+        "Regards,",
+        "YouMatter Support Team",
+    ]
+    text_body = "\n".join(line for line in text_lines if line)
+
+    safe_display_name = html_escape(display_name)
+    safe_email = html_escape(email)
+    safe_password = html_escape(temporary_password)
+    safe_login_url = html_escape(login_url) if login_url else None
+
+    html_lines = [
+        f"<p>Hi {safe_display_name},</p>",
+        "<p>We received a request to reset your YouMatter portal password.</p>",
+        "<p>Use the temporary credentials below to sign in:</p>",
+        "<ul>",
+        f"  <li><strong>Email:</strong> {safe_email}</li>",
+        f"  <li><strong>Temporary Password:</strong> {safe_password}</li>",
+        "</ul>",
+        "<p>Please change your password immediately after logging in.</p>",
+    ]
+    if safe_login_url:
+        html_lines.append(f'<p><a href="{safe_login_url}">Click here to sign in</a></p>')
+    html_lines.extend(
+        [
+            "<p>If you did not request this reset, please contact your administrator right away.</p>",
+            "<p>Regards,<br/>YouMatter Support Team</p>",
+        ]
+    )
+    html_body = "\n".join(html_lines)
+
+    send_email("YouMatter Temporary Password", email, text_body, html_body=html_body)
 
 @api_bp.route("/users", methods=["GET"])
 def api_get_users():
@@ -276,6 +341,40 @@ def api_change_password(user_id):
     user.set_password(new_password)
     db.session.commit()
     return jsonify({"success": True, "message": "Password updated successfully."}), 200
+
+@api_bp.route("/auth/forgot-password", methods=["POST"])
+def api_forgot_password():
+    data = request.get_json() or {}
+    email_input = (data.get("email") or "").strip()
+    if not email_input:
+        return jsonify({"error": "Email is required."}), 400
+
+    normalized_email = email_input.lower()
+    user = User.query.filter(func.lower(User.email) == normalized_email).first()
+    if not user:
+        return jsonify({"error": "No account found for this email."}), 404
+
+    temporary_password = generate_strong_password(12)
+    user.set_password(temporary_password)
+    if (user.status or "").lower() == UserStatus.PENDING.value:
+        user.status = UserStatus.ACTIVE.value
+
+    try:
+        db.session.flush()
+    except SQLAlchemyError as exc:
+        current_app.logger.exception("Failed to persist password reset for %s: %s", user.email, exc)
+        db.session.rollback()
+        return jsonify({"error": "Unable to reset password at this time."}), 503
+
+    try:
+        _send_password_reset_email(user, temporary_password)
+    except Exception as exc:  # pylint: disable=broad-except
+        current_app.logger.exception("Failed to send password reset email to %s: %s", user.email, exc)
+        db.session.rollback()
+        return jsonify({"error": "Unable to send temporary password email. Please try again later."}), 503
+
+    db.session.commit()
+    return jsonify({"success": True, "message": "Temporary password has been emailed to you."}), 200
 
 @api_bp.route("/auth/login", methods=["POST"])
 def api_login():
