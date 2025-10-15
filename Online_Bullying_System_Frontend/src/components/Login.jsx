@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import YouMatterLogo from '../assets/YouMatter_logo_bg_removed.png'; 
 import GoogleLogo from '../assets/google_logo.png';
+import { requestPasswordReset } from '../services/api';
 
 const GOOGLE_SCRIPT_ID = 'google-identity-services';
 
@@ -172,10 +173,129 @@ function GoogleSignInButton({ onCredential, onError, isLoading, variant = 'page'
   );
 }
 
+
+function useForgotPasswordRequest() {
+  const [statusMessage, setStatusMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const reset = () => {
+    setStatusMessage('');
+    setErrorMessage('');
+    setIsSubmitting(false);
+  };
+
+  const submit = async (email) => {
+    const trimmedEmail = (email || '').trim();
+    if (!trimmedEmail) {
+      setErrorMessage('Please enter your email address.');
+      setStatusMessage('');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage('');
+    setStatusMessage('');
+
+    try {
+      const response = await requestPasswordReset(trimmedEmail);
+      setStatusMessage(response?.message || 'Temporary password has been emailed to you.');
+    } catch (err) {
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        'Unable to reset password. Please try again later.';
+      setErrorMessage(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return {
+    submit,
+    statusMessage,
+    errorMessage,
+    isSubmitting,
+    reset,
+  };
+}
+
+function ForgotPasswordForm({
+  onSubmit,
+  onCancel,
+  isLoading,
+  message,
+  error,
+  initialEmail = '',
+  variant = 'page',
+}) {
+  const [email, setEmail] = useState(initialEmail);
+
+  useEffect(() => {
+    setEmail(initialEmail);
+  }, [initialEmail]);
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    onSubmit(email);
+  };
+
+  const formClassName = `forgot-password-form forgot-password-form--${variant}`;
+
+  return (
+    <form onSubmit={handleSubmit} className={formClassName}>
+      <div className="forgot-password-copy">
+        <p>Please enter the email address you'd like your password reset instructions sent to.</p>
+      </div>
+      <label className="forgot-password-label">
+        <span>Enter email address</span>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={isLoading}
+        />
+      </label>
+      <div className="forgot-password-actions">
+        <button className="forgot-password-submit" type="submit" disabled={isLoading}>
+          {isLoading ? 'Sending...' : 'Send to email'}
+        </button>
+        <button
+          type="button"
+          className="forgot-password-back"
+          onClick={onCancel}
+          disabled={isLoading}
+        >
+          Back to Login
+        </button>
+      </div>
+      {message && (
+        <p className="login-success" role="status">
+          {message}
+        </p>
+      )}
+      {error && (
+        <p className="login-error" role="alert">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
 //Login popup
 function LoginModal({ onLogin, onClose, error, isLoading, onGoogleLogin, onAuthError }) {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
+  const [isForgotPassword, setIsForgotPassword] = useState(false)
+  const {
+    submit: submitForgotPassword,
+    statusMessage: forgotStatusMessage,
+    errorMessage: forgotErrorMessage,
+    isSubmitting: isForgotSubmitting,
+    reset: resetForgotState,
+  } = useForgotPasswordRequest()
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -195,44 +315,90 @@ function LoginModal({ onLogin, onClose, error, isLoading, onGoogleLogin, onAuthE
     }
   }
 
+  const handleShowForgotPassword = () => {
+    resetForgotState()
+    setIsForgotPassword(true)
+    if (typeof onAuthError === 'function') {
+      onAuthError(null)
+    }
+  }
+
+  const handleReturnToLogin = () => {
+    resetForgotState()
+    setIsForgotPassword(false)
+  }
+
+  const handleCloseModal = () => {
+    handleReturnToLogin()
+    if (typeof onClose === 'function') {
+      onClose()
+    }
+  }
+
+  const initialForgotEmail = identifier.includes('@') ? identifier : ''
+
   return (
     <div className="login-modal-overlay">
       <div className="login-modal-box">
-        <button className="login-modal-close" onClick={onClose}>&times;</button>
-        <h2>Login</h2>
-        <form onSubmit={handleSubmit}>
-          <label>
-            Email or Username:
-            <input
-              type="text"
-              value={identifier}
-              onChange={e => setIdentifier(e.target.value)}
-              required
-              disabled={isLoading}
+        <button className="login-modal-close" onClick={handleCloseModal}>&times;</button>
+        <div className="login-modal-content">
+          <h2>{isForgotPassword ? 'Forgot your password' : 'Login'}</h2>
+          {isForgotPassword ? (
+            <ForgotPasswordForm
+              variant="modal"
+              onSubmit={submitForgotPassword}
+              onCancel={handleReturnToLogin}
+              isLoading={isForgotSubmitting}
+              message={forgotStatusMessage}
+              error={forgotErrorMessage}
+              initialEmail={initialForgotEmail}
             />
-          </label>
-          <label>
-            Password:
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </label>
-          <button type="submit" disabled={isLoading}>
-            {isLoading ? 'Logging in...' : 'Login'}
-          </button>
-        </form>
-        {error && <p className="login-error">{error}</p>}
-        <hr className="login-divider" />
-        <GoogleSignInButton
-          variant="modal"
-          onCredential={handleGoogleCredential}
-          onError={handleGoogleError}
-          isLoading={isLoading}
-        />
+          ) : (
+            <>
+              <form onSubmit={handleSubmit}>
+                <label>
+                  Email or Username:
+                  <input
+                    type="text"
+                    value={identifier}
+                    onChange={e => setIdentifier(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
+                </label>
+                <label>
+                  Password:
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
+                </label>
+                <button type="submit" disabled={isLoading}>
+                  {isLoading ? 'Logging in...' : 'Login'}
+                </button>
+              </form>
+              {error && <p className="login-error">{error}</p>}
+              <button
+                type="button"
+                className="forgot-password-link"
+                onClick={handleShowForgotPassword}
+                disabled={isLoading}
+              >
+                Forgot password?
+              </button>
+              <hr className="login-divider" />
+              <GoogleSignInButton
+                variant="modal"
+                onCredential={handleGoogleCredential}
+                onError={handleGoogleError}
+                isLoading={isLoading}
+              />
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -242,6 +408,14 @@ function LoginModal({ onLogin, onClose, error, isLoading, onGoogleLogin, onAuthE
 function LoginPage({ onLogin, error, isLoading, onGoogleLogin, onAuthError }) {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
+  const [isForgotPassword, setIsForgotPassword] = useState(false)
+  const {
+    submit: submitForgotPassword,
+    statusMessage: forgotStatusMessage,
+    errorMessage: forgotErrorMessage,
+    isSubmitting: isForgotSubmitting,
+    reset: resetForgotState,
+  } = useForgotPasswordRequest()
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -261,50 +435,89 @@ function LoginPage({ onLogin, error, isLoading, onGoogleLogin, onAuthError }) {
     }
   };
 
+  const handleShowForgotPassword = () => {
+    resetForgotState()
+    setIsForgotPassword(true)
+    if (typeof onAuthError === 'function') {
+      onAuthError(null)
+    }
+  }
+
+  const handleReturnToLogin = () => {
+    resetForgotState()
+    setIsForgotPassword(false)
+  }
+
+  const initialForgotEmail = identifier.includes('@') ? identifier : ''
+
   return (
     <div className="login-page">
       <img
         src={YouMatterLogo}
         alt="YouMatter Logo"
       />
-      <h2>Login</h2>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>
-            Email or Username:
-            <input
-              type="text"
-              value={identifier}
-              onChange={e => setIdentifier(e.target.value)}
-              required
+      <div className="login-page-content">
+        <h2>{isForgotPassword ? 'Forgot your password' : 'Login'}</h2>
+        {isForgotPassword ? (
+          <ForgotPasswordForm
+            onSubmit={submitForgotPassword}
+            onCancel={handleReturnToLogin}
+            isLoading={isForgotSubmitting}
+            message={forgotStatusMessage}
+            error={forgotErrorMessage}
+            initialEmail={initialForgotEmail}
+            variant="page"
+          />
+        ) : (
+          <>
+            <form onSubmit={handleSubmit}>
+              <div>
+                <label>
+                  Email or Username:
+                  <input
+                    type="text"
+                    value={identifier}
+                    onChange={e => setIdentifier(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
+                </label>
+              </div>
+              <div>
+                <label>
+                  Password:
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
+                </label>
+              </div>
+              <button type="submit" disabled={isLoading}>
+                {isLoading ? 'Logging in...' : 'Login'}
+              </button>
+            </form>
+            {error && <p className="login-error">{error}</p>}
+            <button
+              type="button"
+              className="forgot-password-link"
+              onClick={handleShowForgotPassword}
               disabled={isLoading}
+            >
+              Forgot password?
+            </button>
+            <hr className="login-divider" />
+            <GoogleSignInButton
+              variant="page"
+              onCredential={handleGoogleCredential}
+              onError={handleGoogleError}
+              isLoading={isLoading}
             />
-          </label>
-        </div>
-        <div>
-          <label>
-            Password:
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </label>
-        </div>
-        <button type="submit" disabled={isLoading}>
-          {isLoading ? 'Logging in...' : 'Login'}
-        </button>
-      </form>
-      {error && <p className="login-error">{error}</p>}
-      <hr className="login-divider" />
-      <GoogleSignInButton
-        variant="page"
-        onCredential={handleGoogleCredential}
-        onError={handleGoogleError}
-        isLoading={isLoading}
-      />
+          </>
+        )}
+      </div>
     </div>
   )
 }

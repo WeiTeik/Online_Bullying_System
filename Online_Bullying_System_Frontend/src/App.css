@@ -271,7 +271,11 @@ a.nav-link::after {
   border-radius: 12px;
   box-shadow: 0 2px 16px rgba(0,0,0,0.12);
   min-width: 320px;
+  width: min(90vw, 420px);
+  min-height: 440px;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 @keyframes modalFadeIn {
@@ -294,8 +298,16 @@ a.nav-link::after {
   color: #e74c3c;
 }
 
+.login-modal-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  justify-content: flex-start;
+  gap: 18px;
+}
+
 .login-modal-box h2 {
-  margin-bottom: 20px;
+  margin: 0;
   text-align: center;
   color: #2a3b4c;
 }
@@ -307,7 +319,8 @@ a.nav-link::after {
 }
 
 .login-modal-box input[type="text"],
-.login-modal-box input[type="password"] {
+.login-modal-box input[type="password"],
+.login-modal-box input[type="email"] {
   width: 100%;
   padding: 8px;
   margin-top: 4px;
@@ -334,25 +347,40 @@ a.nav-link::after {
 }
 
 .login-page {
-  max-width: 400px;
+  max-width: 420px;
   margin: 2rem auto;
   padding: 24px;
   border: 1px solid #ccc;
-  border-radius: 8px;
-  background: #f7fafd;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  text-align: center;
 }
 
 .login-page img {
   display: block;
-  margin: 0 auto 1rem;
+  margin: 0 auto;
   max-width: 180px;
 }
 
+.login-page-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .login-page h2 {
-  text-align: center;
-  margin-bottom: 24px;
+  margin: 0;
   color: #2a3b4c;
+}
+
+.login-page form {
+  text-align: left;
 }
 
 .login-page form label {
@@ -363,7 +391,8 @@ a.nav-link::after {
 }
 
 .login-page input[type="text"],
-.login-page input[type="password"] {
+.login-page input[type="password"],
+.login-page input[type="email"] {
   width: 100%;
   padding: 8px;
   margin-top: 4px;
@@ -385,6 +414,138 @@ a.nav-link::after {
   color: #c0392b;
   text-align: center;
   font-size: 0.9rem;
+}
+
+.login-success {
+  margin-top: 12px;
+  color: #1e7e34;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.forgot-password-link {
+  background: none;
+  border: none;
+  color: #6c63ff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  text-decoration: underline;
+  display: inline-block;
+  margin: 8px auto 0;
+}
+
+.forgot-password-link:disabled {
+  color: #a0aab4;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.forgot-password-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.forgot-password-form--modal {
+  flex: 1;
+  justify-content: flex-start;
+}
+
+.forgot-password-form--page {
+  width: 100%;
+}
+
+.forgot-password-copy {
+  text-align: left;
+  color: #1f2d3d;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.forgot-password-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  color: #1f2d3d;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.forgot-password-label span {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: #2a3b4c;
+}
+
+.forgot-password-form input {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #3b82f6;
+  border-radius: 10px;
+  font-size: 1rem;
+  background: #fff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.forgot-password-form input:focus {
+  border-color: #1d4ed8;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.2);
+}
+
+.forgot-password-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.forgot-password-submit {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(180deg, #2f6bff 0%, #1f3f7f 100%);
+  transition: transform 0.1s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.forgot-password-submit:hover {
+  box-shadow: 0 8px 16px rgba(47, 107, 255, 0.25);
+}
+
+.forgot-password-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.forgot-password-back {
+  align-self: center;
+  background: none;
+  border: none;
+  color: #2f6bff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: color 0.2s ease;
+}
+
+.forgot-password-back:hover {
+  color: #1d4ed8;
+}
+
+.forgot-password-back:disabled {
+  color: #9aa6c4;
+  cursor: not-allowed;
+  text-decoration: none;
 }
 
 .login-page button[type="submit"] {
