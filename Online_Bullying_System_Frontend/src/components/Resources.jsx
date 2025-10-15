@@ -38,10 +38,11 @@ function Resources() {
       <div className="resource-section">
         <h3>What Constitutes Bullying?</h3>
         <ul className="bullying-types">
-          <li><strong>Physical Bullying:</strong> Hitting, kicking, pushing, damaging property</li>
-          <li><strong>Verbal Bullying:</strong> Name-calling, insults, threats, inappropriate comments</li>
-          <li><strong>Social Bullying:</strong> Exclusion, spreading rumors, public embarrassment</li>
-          <li><strong>Cyber Bullying:</strong> Online harassment, threatening messages, sharing private information</li>
+          <li><strong>Verbal Bullying:</strong> Name-calling, taunting, threats, or hurtful jokes meant to shame someone.</li>
+          <li><strong>Physical Bullying:</strong> Any unwanted physical contact such as hitting, kicking, pushing, or damaging belongings.</li>
+          <li><strong>Cyber Bullying:</strong> Online harassment, spreading harmful content, or sharing private information without consent.</li>
+          <li><strong>Social Exclusion:</strong> Deliberately leaving someone out, isolating them from groups, or encouraging others to ignore them.</li>
+          <li><strong>Harassment:</strong> Repeated unwanted behavior—verbal, physical, or digital—that intimidates, humiliates, or coerces someone.</li>
         </ul>
       </div>
 
