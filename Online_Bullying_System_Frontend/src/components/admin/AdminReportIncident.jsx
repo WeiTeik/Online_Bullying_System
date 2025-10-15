@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getComplaintById, addComplaintComment, updateComplaintStatus } from '../../services/api';
+import { getComplaintByIdentifier, addComplaintComment, updateComplaintStatus } from '../../services/api';
 
 const formatDateTimeLong = (value) => {
   if (!value) return '—';
@@ -71,7 +71,7 @@ const formatBytes = (bytes) => {
 };
 
 const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
-  const { reportId } = useParams();
+  const { complaintIdentifier } = useParams();
   const navigate = useNavigate();
 
   const [incident, setIncident] = useState(null);
@@ -89,7 +89,7 @@ const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
       setLoading(true);
       setError(null);
       try {
-        const data = await getComplaintById(reportId);
+        const data = await getComplaintByIdentifier(complaintIdentifier);
         if (isMounted) {
           setIncident(data);
           setSelectedStatus((data?.status || 'new').toLowerCase());
@@ -107,7 +107,7 @@ const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
       }
     };
 
-    if (reportId) {
+    if (complaintIdentifier) {
       fetchIncident();
     } else {
       setIncident(null);
@@ -118,7 +118,7 @@ const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
     return () => {
       isMounted = false;
     };
-  }, [reportId]);
+  }, [complaintIdentifier]);
 
   useEffect(() => {
     if (!feedbackMessage) return undefined;

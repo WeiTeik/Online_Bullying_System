@@ -369,6 +369,18 @@ def get_complaint_by_id(complaint_id: int, include_comments: bool = False) -> Op
     return complaint.to_dict(include_comments=include_comments)
 
 
+def get_complaint_by_reference_code(reference_code: str, include_comments: bool = False) -> Optional[Dict[str, Any]]:
+    if not reference_code:
+        return None
+    cleaned = reference_code.strip().upper()
+    if not cleaned:
+        return None
+    complaint = Complaint.query.filter_by(reference_code=cleaned).first()
+    if not complaint:
+        return None
+    return complaint.to_dict(include_comments=include_comments)
+
+
 def get_complaints_for_user(user_id: int, include_comments: bool = False) -> List[Dict[str, Any]]:
     complaints = (
         Complaint.query.filter_by(user_id=user_id)

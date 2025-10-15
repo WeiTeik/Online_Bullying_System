@@ -14,6 +14,7 @@ from app.crud.complaint import (
     get_all_complaints,
     add_comment,
     get_complaint_by_id,
+    get_complaint_by_reference_code,
     get_comments,
     update_complaint_status,
 )
@@ -181,9 +182,17 @@ def api_get_complaints():
     return jsonify(complaints), 200
 
 
-@api_bp.route("/complaints/<int:complaint_id>", methods=["GET"])
-def api_get_complaint(complaint_id):
-    complaint = get_complaint_by_id(complaint_id, include_comments=True)
+@api_bp.route("/complaints/<complaint_identifier>", methods=["GET"])
+def api_get_complaint(complaint_identifier):
+    identifier = (complaint_identifier or "").strip()
+    complaint = None
+    if identifier.isdigit():
+        complaint = get_complaint_by_id(int(identifier), include_comments=True)
+    else:
+        complaint = get_complaint_by_reference_code(
+            identifier,
+            include_comments=True,
+        )
     if not complaint:
         return jsonify({"error": "Complaint not found"}), 404
     return jsonify(complaint), 200
