@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import jsPDF from 'jspdf';
 import { getComplaintByIdentifier, addComplaintComment, updateComplaintStatus } from '../../services/api';
 
 const formatDateTimeLong = (value) => {
@@ -229,6 +230,215 @@ const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
     [submittedAt, updatedAt]
   );
 
+  const handleDownloadPdf = () => {
+    if (!incident) return;
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 18;
+    const contentWidth = pageWidth - margin * 2;
+    const columnGap = 12;
+    const columnWidth = (contentWidth - columnGap) / 2;
+    const headerHeight = 40;
+
+    const caseCode = incident.reference_code || incident.referenceCode || '-';
+    const incidentType = incident.incident_type || '—';
+
+    doc.setFillColor(6, 190, 182);
+    doc.rect(0, 0, pageWidth, headerHeight, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.text('Incident Report', margin, 20);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.text(`Generated on ${formatDateTimeLong(new Date())}`, margin, headerHeight - 10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Case ${caseCode}`, pageWidth - margin, 20, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Type: ${incidentType}`, pageWidth - margin, headerHeight - 10, { align: 'right' });
+
+    doc.setTextColor(0, 0, 0);
+
+    let cursorY = headerHeight + 12;
+
+    const newPage = () => {
+      doc.addPage();
+      cursorY = margin;
+    };
+
+    const ensureSpace = (height) => {
+      if (cursorY + height > pageHeight - margin) {
+        newPage();
+      }
+    };
+
+    const addSectionHeading = (text) => {
+      ensureSpace(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.text(text, margin, cursorY);
+      doc.setDrawColor(221, 229, 238);
+      doc.setLineWidth(0.4);
+      doc.line(margin, cursorY + 1.5, margin + contentWidth, cursorY + 1.5);
+      cursorY += 8;
+    };
+
+    addSectionHeading('Summary');
+
+    const columns = [
+      { x: margin, y: cursorY, width: columnWidth },
+      { x: margin + columnWidth + columnGap, y: cursorY, width: columnWidth },
+    ];
+
+    const resetColumnsToNewPage = () => {
+      newPage();
+      columns[0].y = cursorY;
+      columns[1].y = cursorY;
+    };
+
+    const addFieldToColumn = (columnIndex, label, value) => {
+      const column = columns[columnIndex];
+      const textValue =
+        value && typeof value === 'string' ? value : value ? String(value) : '-';
+      const lines = doc.splitTextToSize(textValue, column.width);
+      const blockHeight = 5 + lines.length * 5 + 3;
+      if (column.y + blockHeight > pageHeight - margin) {
+        resetColumnsToNewPage();
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text(label, column.x, column.y);
+      doc.setFont('helvetica', 'normal');
+      column.y += 5;
+      doc.text(lines, column.x, column.y);
+      column.y += lines.length * 5 + 3;
+    };
+
+    addFieldToColumn(0, 'Case ID', caseCode);
+    addFieldToColumn(0, 'Status', selectedStatusLabel);
+    addFieldToColumn(0, 'Reported By', incident.student_name || 'Anonymous');
+    addFieldToColumn(0, 'Reported On', formatDateTimeLong(submittedAt) || '-');
+    addFieldToColumn(0, 'Last Updated', formatDateTimeLong(updatedAt) || '-');
+    addFieldToColumn(0, 'Response Time', responseTime || '—');
+
+    addFieldToColumn(1, 'Date of Incident', formatDateOnly(incident.incident_date) || '-');
+    addFieldToColumn(1, 'Room Number', incident.room_number || '-');
+    addFieldToColumn(1, 'Type of Incident', incident.incident_type || '-');
+    addFieldToColumn(1, 'Witnesses', humanizeList(incident.witnesses));
+
+    cursorY = Math.max(columns[0].y, columns[1].y) + 10;
+
+    const addCard = (title, body) => {
+      ensureSpace(18);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text(title, margin, cursorY);
+      cursorY += 6;
+
+      const toLines = (value) => {
+        const stringValue =
+          value && typeof value === 'string' ? value : value ? String(value) : '-';
+        return doc.splitTextToSize(stringValue, contentWidth - 10);
+      };
+
+      const bodyLines = Array.isArray(body)
+        ? body.flatMap((line, index) => {
+            const lines = toLines(line);
+            return index < body.length - 1 ? [...lines, ''] : lines;
+          })
+        : toLines(body);
+
+      const blockHeight = Math.max(18, bodyLines.length * 5 + 8);
+
+      if (cursorY + blockHeight > pageHeight - margin) {
+        newPage();
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text(title, margin, cursorY);
+        cursorY += 6;
+      }
+
+      doc.setFillColor(248, 250, 255);
+      doc.setDrawColor(215, 226, 252);
+      doc.roundedRect(margin, cursorY, contentWidth, blockHeight, 3, 3, 'FD');
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.setTextColor(56, 66, 82);
+      doc.text(bodyLines, margin + 4, cursorY + 7);
+      doc.setTextColor(0, 0, 0);
+
+      cursorY += blockHeight + 10;
+    };
+
+    addCard('Incident Description', incident.description || 'No description provided.');
+
+    const attachmentsBody =
+      incident.attachments && incident.attachments.length > 0
+        ? incident.attachments.map((file, index) => {
+            const size = formatBytes(file.size);
+            const label = file.name || `Attachment ${index + 1}`;
+            return size ? `• ${label} (${size})` : `• ${label}`;
+          })
+        : ['No attachments included.'];
+    addCard('Attachments', attachmentsBody);
+
+    ensureSpace(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text('Comments', margin, cursorY);
+    cursorY += 6;
+
+    const addCommentCard = (titleText, bodyText) => {
+      const bodyLines = doc.splitTextToSize(bodyText, contentWidth - 12);
+      const blockHeight = Math.max(20, bodyLines.length * 5 + 14);
+      if (cursorY + blockHeight > pageHeight - margin) {
+        newPage();
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text('Comments (cont.)', margin, cursorY);
+        cursorY += 6;
+      }
+
+      doc.setDrawColor(215, 226, 252);
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(margin, cursorY, contentWidth, blockHeight, 2, 2, 'S');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(35, 46, 71);
+      doc.text(titleText, margin + 4, cursorY + 7);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(71, 85, 105);
+      doc.text(bodyLines, margin + 4, cursorY + 13);
+      doc.setTextColor(0, 0, 0);
+
+      cursorY += blockHeight + 6;
+    };
+
+    if (comments.length === 0) {
+      addCommentCard(
+        'No comments recorded.',
+        'No administrator comments have been added to this incident.'
+      );
+    } else {
+      comments.forEach((comment) => {
+        const author = comment.author_name || 'System';
+        const timestamp = formatDateTimeLong(comment.created_at);
+        const titleText = timestamp ? `${author} • ${timestamp}` : author;
+        addCommentCard(titleText, comment.message || '-');
+      });
+    }
+
+    doc.save(`incident-${incident.reference_code || incident.id || 'report'}.pdf`);
+  };
+
   if (loading) {
     return (
       <div className="admin-report-incident">
@@ -267,7 +477,32 @@ const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
         <button type="button" className="incident-back" onClick={() => navigate('/admin/reports')}>
           ← Back to reports
         </button>
-        <h1>Report Incident</h1>
+        <div className="incident-header__actions">
+          <h1>Report Incident</h1>
+          <button
+            type="button"
+            className="incident-download-btn"
+            onClick={handleDownloadPdf}
+            aria-label="Download incident report as PDF"
+            disabled={!incident}
+          >
+            <svg
+              className="incident-download-icon"
+              viewBox="0 0 24 24"
+              role="img"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 3a1 1 0 0 1 1 1v8.586l2.293-2.293a1 1 0 1 1 1.414 1.414l-4.004 4.004a1 1 0 0 1-1.414 0L7.285 11.707a1 1 0 1 1 1.414-1.414L11 12.586V4a1 1 0 0 1 1-1z"
+                fill="currentColor"
+              />
+              <path
+                d="M5 15a1 1 0 0 1 1 1v3h12v-3a1 1 0 1 1 2 0v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a1 1 0 0 1 1-1z"
+                fill="currentColor"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {feedbackMessage && (

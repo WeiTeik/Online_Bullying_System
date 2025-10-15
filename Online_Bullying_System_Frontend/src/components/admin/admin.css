@@ -294,6 +294,12 @@
   gap: 16px;
 }
 
+.incident-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .incident-header h1 {
   font-size: 1.6rem;
   font-weight: 700;
@@ -309,6 +315,40 @@
   cursor: pointer;
   padding: 6px 0;
   font-size: 0.95rem;
+}
+
+.incident-download-btn {
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #06beb6 0%, #48b1bf 100%);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(72, 177, 191, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.incident-download-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+}
+
+.incident-download-btn:hover:not(:disabled),
+.incident-download-btn:focus-visible:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(72, 177, 191, 0.25);
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+.incident-download-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .incident-back:hover,
