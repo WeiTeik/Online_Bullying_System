@@ -16,8 +16,12 @@ const formatDateTime = (value) => {
 };
 
 const normaliseStatus = (status) => {
-  if (!status) return 'New';
-  return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const raw = (status || '').toString().trim();
+  if (!raw) return 'New';
+  const normalized = raw.toLowerCase().replace(/\s+/g, '_');
+  if (normalized === 'new' || normalized === 'pending') return 'New';
+  if (normalized === 'in_progress' || normalized === 'investigating') return 'Investigating';
+  return raw.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
 const statusClass = (status) => {
@@ -48,7 +52,7 @@ const AdminHome = ({ complaints = [], isLoading, error }) => {
 
     return [
       { label: 'New Case', value: totals.new },
-      { label: 'Progress Case', value: totals.progress },
+      { label: 'Investigating Case', value: totals.progress },
       { label: 'Complete Case', value: totals.complete },
       { label: 'Reject Case', value: totals.rejected },
       { label: 'Total Case', value: totals.total },

@@ -284,8 +284,88 @@ function ForgotPasswordForm({
   );
 }
 
+function TwoFactorForm({
+  email,
+  onSubmit,
+  onCancel,
+  isLoading,
+  error,
+  variant = 'page',
+}) {
+  const [code, setCode] = useState('');
+
+  const handleCodeChange = (event) => {
+    const nextValue = event.target.value.replace(/\D/g, '').slice(0, 6);
+    setCode(nextValue);
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    onSubmit(code);
+  };
+
+  const formClassName = `two-factor-form two-factor-form--${variant}`;
+
+  return (
+    <form onSubmit={handleSubmit} className={formClassName}>
+      <div className="two-factor-copy">
+        <p>Enter the six-digit code we just sent to your email to finish signing in.</p>
+        {email && (
+          <p className="two-factor-email">
+            Code sent to <strong>{email}</strong>.
+          </p>
+        )}
+      </div>
+      <label className="two-factor-label">
+        <span>Enter 6-digit code</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          pattern="[0-9]{6}"
+          maxLength={6}
+          value={code}
+          onChange={handleCodeChange}
+          disabled={isLoading}
+          required
+        />
+      </label>
+      <div className="two-factor-actions">
+        <button className="two-factor-submit" type="submit" disabled={isLoading || code.length !== 6}>
+          {isLoading ? 'Verifying...' : 'Verify code'}
+        </button>
+        <button
+          type="button"
+          className="two-factor-back"
+          onClick={onCancel}
+          disabled={isLoading}
+        >
+          Back to Login
+        </button>
+      </div>
+      {error && (
+        <p className="login-error" role="alert">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
 //Login popup
-function LoginModal({ onLogin, onClose, error, isLoading, onGoogleLogin, onAuthError }) {
+function LoginModal({
+  onLogin,
+  onClose,
+  error,
+  isLoading,
+  onGoogleLogin,
+  onAuthError,
+  pendingTwoFactor,
+  onVerifyTwoFactor,
+  twoFactorError,
+  isTwoFactorLoading,
+  onCancelTwoFactor,
+}) {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [isForgotPassword, setIsForgotPassword] = useState(false)
@@ -296,6 +376,15 @@ function LoginModal({ onLogin, onClose, error, isLoading, onGoogleLogin, onAuthE
     isSubmitting: isForgotSubmitting,
     reset: resetForgotState,
   } = useForgotPasswordRequest()
+  const isTwoFactorActive = Boolean(pendingTwoFactor?.challengeId)
+  const isForgotPasswordActive = isForgotPassword && !isTwoFactorActive
+
+  useEffect(() => {
+    if (isTwoFactorActive) {
+      resetForgotState()
+      setIsForgotPassword(false)
+    }
+  }, [isTwoFactorActive, resetForgotState])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -316,6 +405,9 @@ function LoginModal({ onLogin, onClose, error, isLoading, onGoogleLogin, onAuthE
   }
 
   const handleShowForgotPassword = () => {
+    if (isTwoFactorActive) {
+      return
+    }
     resetForgotState()
     setIsForgotPassword(true)
     if (typeof onAuthError === 'function') {
@@ -326,6 +418,9 @@ function LoginModal({ onLogin, onClose, error, isLoading, onGoogleLogin, onAuthE
   const handleReturnToLogin = () => {
     resetForgotState()
     setIsForgotPassword(false)
+    if (typeof onCancelTwoFactor === 'function') {
+      onCancelTwoFactor()
+    }
   }
 
   const handleCloseModal = () => {
@@ -336,14 +431,30 @@ function LoginModal({ onLogin, onClose, error, isLoading, onGoogleLogin, onAuthE
   }
 
   const initialForgotEmail = identifier.includes('@') ? identifier : ''
+  const maskedEmail = pendingTwoFactor?.email || ''
 
   return (
     <div className="login-modal-overlay">
       <div className="login-modal-box">
         <button className="login-modal-close" onClick={handleCloseModal}>&times;</button>
         <div className="login-modal-content">
-          <h2>{isForgotPassword ? 'Forgot your password' : 'Login'}</h2>
-          {isForgotPassword ? (
+          <h2>
+            {isTwoFactorActive
+              ? 'Verify your identity'
+              : isForgotPasswordActive
+                ? 'Forgot your password'
+                : 'Login'}
+          </h2>
+          {isTwoFactorActive ? (
+            <TwoFactorForm
+              variant="modal"
+              email={maskedEmail}
+              onSubmit={(code) => onVerifyTwoFactor?.(pendingTwoFactor.challengeId, code)}
+              onCancel={handleReturnToLogin}
+              isLoading={isTwoFactorLoading}
+              error={twoFactorError}
+            />
+          ) : isForgotPasswordActive ? (
             <ForgotPasswordForm
               variant="modal"
               onSubmit={submitForgotPassword}
@@ -405,7 +516,18 @@ function LoginModal({ onLogin, onClose, error, isLoading, onGoogleLogin, onAuthE
 }
 
 //login page
-function LoginPage({ onLogin, error, isLoading, onGoogleLogin, onAuthError }) {
+function LoginPage({
+  onLogin,
+  error,
+  isLoading,
+  onGoogleLogin,
+  onAuthError,
+  pendingTwoFactor,
+  onVerifyTwoFactor,
+  twoFactorError,
+  isTwoFactorLoading,
+  onCancelTwoFactor,
+}) {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [isForgotPassword, setIsForgotPassword] = useState(false)
@@ -416,6 +538,15 @@ function LoginPage({ onLogin, error, isLoading, onGoogleLogin, onAuthError }) {
     isSubmitting: isForgotSubmitting,
     reset: resetForgotState,
   } = useForgotPasswordRequest()
+  const isTwoFactorActive = Boolean(pendingTwoFactor?.challengeId)
+  const isForgotPasswordActive = isForgotPassword && !isTwoFactorActive
+
+  useEffect(() => {
+    if (isTwoFactorActive) {
+      resetForgotState()
+      setIsForgotPassword(false)
+    }
+  }, [isTwoFactorActive, resetForgotState])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -436,6 +567,9 @@ function LoginPage({ onLogin, error, isLoading, onGoogleLogin, onAuthError }) {
   };
 
   const handleShowForgotPassword = () => {
+    if (isTwoFactorActive) {
+      return
+    }
     resetForgotState()
     setIsForgotPassword(true)
     if (typeof onAuthError === 'function') {
@@ -446,9 +580,13 @@ function LoginPage({ onLogin, error, isLoading, onGoogleLogin, onAuthError }) {
   const handleReturnToLogin = () => {
     resetForgotState()
     setIsForgotPassword(false)
+    if (typeof onCancelTwoFactor === 'function') {
+      onCancelTwoFactor()
+    }
   }
 
   const initialForgotEmail = identifier.includes('@') ? identifier : ''
+  const maskedEmail = pendingTwoFactor?.email || ''
 
   return (
     <div className="login-page">
@@ -457,8 +595,23 @@ function LoginPage({ onLogin, error, isLoading, onGoogleLogin, onAuthError }) {
         alt="YouMatter Logo"
       />
       <div className="login-page-content">
-        <h2>{isForgotPassword ? 'Forgot your password' : 'Login'}</h2>
-        {isForgotPassword ? (
+        <h2>
+          {isTwoFactorActive
+            ? 'Verify your identity'
+            : isForgotPasswordActive
+              ? 'Forgot your password'
+              : 'Login'}
+        </h2>
+        {isTwoFactorActive ? (
+          <TwoFactorForm
+            variant="page"
+            email={maskedEmail}
+            onSubmit={(code) => onVerifyTwoFactor?.(pendingTwoFactor.challengeId, code)}
+            onCancel={handleReturnToLogin}
+            isLoading={isTwoFactorLoading}
+            error={twoFactorError}
+          />
+        ) : isForgotPasswordActive ? (
           <ForgotPasswordForm
             onSubmit={submitForgotPassword}
             onCancel={handleReturnToLogin}

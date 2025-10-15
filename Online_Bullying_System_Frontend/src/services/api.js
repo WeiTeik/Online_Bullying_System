@@ -31,6 +31,11 @@ export async function loginWithGoogle(idToken) {
   return res.data;
 }
 
+export async function verifyTwoFactor(challengeId, code) {
+  const res = await api.post("/auth/verify-2fa", { challenge_id: challengeId, code });
+  return res.data;
+}
+
 // Users
 export async function getUsers() {
   const res = await api.get("/users");

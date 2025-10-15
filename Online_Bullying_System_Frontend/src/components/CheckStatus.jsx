@@ -11,14 +11,20 @@ const formatDateTime = (value) => {
   });
 };
 
-const normaliseStatus = (status = '') =>
-  status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const normaliseStatus = (status = '') => {
+  const raw = (status || '').toString().trim();
+  if (!raw) return 'Pending';
+  const normalized = raw.toLowerCase().replace(/\s+/g, '_');
+  if (normalized === 'new' || normalized === 'pending') return 'Pending';
+  if (normalized === 'in_progress' || normalized === 'investigating') return 'Investigating';
+  return raw.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+};
 
 const STATUS_KEYS = ['new', 'in_progress', 'resolved', 'rejected'];
 
 const STATUS_NOTICE = {
-  new: 'We have received your report and it is awaiting review.',
-  in_progress: 'Our team is currently reviewing your report. We will notify you once there is an update.',
+  new: 'We have received your report and it is pending review by the school team.',
+  in_progress: 'Our team is investigating your report. We will notify you once there is an update.',
   resolved: 'Your report has been resolved. Thank you for helping us keep the community safe.',
   rejected:
     'This report was rejected. Please review the feedback from school staff and submit a new report if needed.',
