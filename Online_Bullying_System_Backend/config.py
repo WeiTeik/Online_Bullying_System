@@ -24,3 +24,4 @@ class Config:
     MAIL_DEFAULT_SENDER = os.getenv('MAIL_DEFAULT_SENDER', MAIL_USERNAME)
     MAIL_TIMEOUT = int(os.getenv('MAIL_TIMEOUT', 30))
     PORTAL_LOGIN_URL = os.getenv('PORTAL_LOGIN_URL')
+    GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
