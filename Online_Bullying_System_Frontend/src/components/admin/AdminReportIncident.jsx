@@ -52,7 +52,7 @@ const statusToBadge = (status) => {
 
 const STATUS_OPTIONS = [
   { value: 'new', label: 'New' },
-  { value: 'in_progress', label: 'In Progress' },
+  { value: 'in_progress', label: 'Investigating' },
   { value: 'resolved', label: 'Resolved' },
   { value: 'rejected', label: 'Rejected' },
 ];

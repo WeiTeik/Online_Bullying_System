@@ -781,7 +781,7 @@ a.nav-link::after {
 .login-divider {
   border: none;
   border-top: 3px solid #e0e0e0;
-  margin: 24px 0;
+  margin: 0px 0;
   width: 100%;
 }
 /* --- End Login Page Styles --- */

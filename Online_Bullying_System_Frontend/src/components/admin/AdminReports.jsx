@@ -24,8 +24,12 @@ const statusClass = (status) => {
 };
 
 const normaliseStatusLabel = (status) => {
-  if (!status) return 'New';
-  return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const raw = (status || '').toString().trim();
+  if (!raw) return 'New';
+  const normalized = raw.toLowerCase().replace(/\s+/g, '_');
+  if (normalized === 'new' || normalized === 'pending') return 'New';
+  if (normalized === 'in_progress' || normalized === 'investigating') return 'Investigating';
+  return raw.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
 const AdminReports = ({ currentUser, onRefreshComplaints }) => {
