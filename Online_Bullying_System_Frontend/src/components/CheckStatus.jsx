@@ -11,6 +11,36 @@ const formatDateTime = (value) => {
   });
 };
 
+const parseDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatResponseTime = (startValue, endValue) => {
+  const start = parseDate(startValue);
+  const end = parseDate(endValue);
+  if (!start || !end) return null;
+  const diffMs = Math.max(0, end.getTime() - start.getTime());
+  const totalMinutes = Math.round(diffMs / 60000);
+  if (totalMinutes < 1) return 'under 1 minute';
+
+  const MINUTES_IN_DAY = 1440;
+  const MINUTES_IN_HOUR = 60;
+  const days = Math.floor(totalMinutes / MINUTES_IN_DAY);
+  const hours = Math.floor((totalMinutes % MINUTES_IN_DAY) / MINUTES_IN_HOUR);
+  const minutes = totalMinutes % MINUTES_IN_HOUR;
+
+  const parts = [];
+  if (days) parts.push(`${days} day${days !== 1 ? 's' : ''}`);
+  if (hours) parts.push(`${hours} hr${hours !== 1 ? 's' : ''}`);
+  if (minutes && !days && parts.length < 2) {
+    parts.push(`${minutes} min${minutes !== 1 ? 's' : ''}`);
+  }
+
+  return parts.length > 0 ? parts.join(' ') : 'under 1 minute';
+};
+
 const normaliseStatus = (status = '') => {
   const raw = (status || '').toString().trim();
   if (!raw) return 'Pending';
@@ -157,6 +187,8 @@ function ComplaintStatus({ complaints = [], loading, error, onAddComment, curren
             const attachments = complaint.attachments || [];
             const isExpanded = expanded[complaint.id] ?? true;
             const draft = commentDrafts[complaint.id] || '';
+            const statusUpdatedAt = complaint.updated_at || complaint.updatedAt;
+            const responseTime = formatResponseTime(submittedAt, statusUpdatedAt);
 
             return (
               <div
@@ -192,6 +224,12 @@ function ComplaintStatus({ complaints = [], loading, error, onAddComment, curren
                     <div className={`status-notice status-notice--${statusInfo.statusClass}`}>
                       {statusInfo.notice}
                     </div>
+                  )}
+                  {statusUpdatedAt && (
+                    <p>
+                      <strong>Status updated:</strong> {formatDateTime(statusUpdatedAt)}
+                      {responseTime ? ` (response time: ${responseTime})` : ''}
+                    </p>
                   )}
                   <p><strong>Type:</strong> {incidentType || '—'}</p>
                   <p><strong>Incident Date:</strong> {formatDateTime(incidentDate)}</p>

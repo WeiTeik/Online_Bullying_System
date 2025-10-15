@@ -360,6 +360,34 @@
   gap: 12px;
 }
 
+.incident-card__status-meta {
+  margin: 12px 0 20px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f7fbff 0%, #ecf3ff 100%);
+  box-shadow: 0 8px 18px rgba(72, 177, 191, 0.14);
+  font-size: 0.95rem;
+  color: #1e2a3b;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  position: relative;
+}
+
+.incident-card__status-meta::before {
+  content: '⏱';
+  font-size: 1.35rem;
+  line-height: 1;
+  color: #2f8fcb;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.incident-card__status-meta p {
+  margin: 0;
+  line-height: 1.55;
+}
+
 .incident-status-pill {
   display: inline-flex;
   align-items: center;

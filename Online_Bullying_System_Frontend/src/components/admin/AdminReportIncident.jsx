@@ -50,6 +50,36 @@ const statusToBadge = (status) => {
   return 'badge-new';
 };
 
+const parseDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatResponseTime = (startValue, endValue) => {
+  const start = parseDate(startValue);
+  const end = parseDate(endValue);
+  if (!start || !end) return null;
+  const diffMs = Math.max(0, end.getTime() - start.getTime());
+  const totalMinutes = Math.round(diffMs / 60000);
+  if (totalMinutes < 1) return 'under 1 minute';
+
+  const MINUTES_IN_DAY = 1440;
+  const MINUTES_IN_HOUR = 60;
+  const days = Math.floor(totalMinutes / MINUTES_IN_DAY);
+  const hours = Math.floor((totalMinutes % MINUTES_IN_DAY) / MINUTES_IN_HOUR);
+  const minutes = totalMinutes % MINUTES_IN_HOUR;
+
+  const parts = [];
+  if (days) parts.push(`${days} day${days !== 1 ? 's' : ''}`);
+  if (hours) parts.push(`${hours} hr${hours !== 1 ? 's' : ''}`);
+  if (minutes && !days && parts.length < 2) {
+    parts.push(`${minutes} min${minutes !== 1 ? 's' : ''}`);
+  }
+
+  return parts.length > 0 ? parts.join(' ') : 'under 1 minute';
+};
+
 const STATUS_OPTIONS = [
   { value: 'new', label: 'New' },
   { value: 'in_progress', label: 'Investigating' },
@@ -192,6 +222,12 @@ const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
     if (match) return match.label;
     return (selectedStatus || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'New';
   }, [selectedStatus]);
+  const submittedAt = incident?.submitted_at || incident?.submittedAt;
+  const updatedAt = incident?.updated_at || incident?.updatedAt;
+  const responseTime = useMemo(
+    () => formatResponseTime(submittedAt, updatedAt),
+    [submittedAt, updatedAt]
+  );
 
   if (loading) {
     return (
@@ -252,6 +288,14 @@ const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
             </span>
           </div>
         </header>
+        {updatedAt && (
+          <div className="incident-card__status-meta">
+            <p>
+              Status updated on {formatDateTimeLong(updatedAt)}
+              {responseTime ? ` (response time: ${responseTime})` : ''}
+            </p>
+          </div>
+        )}
 
         <div className="incident-card__reported">
           <span className="incident-card__label">Reported by:</span>
