@@ -124,8 +124,12 @@ export async function updateComplaintStatus(complaintId, status) {
   return res.data;
 }
 
-export async function getComplaintById(id) {
-  const res = await api.get(`/complaints/${id}`);
+export async function getComplaintByIdentifier(identifier) {
+  if (!identifier && identifier !== 0) {
+    throw new Error("Complaint identifier is required");
+  }
+  const safeIdentifier = encodeURIComponent(String(identifier).trim());
+  const res = await api.get(`/complaints/${safeIdentifier}`);
   return res.data;
 }
 

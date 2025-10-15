@@ -86,6 +86,7 @@ const AdminReports = ({ currentUser, onRefreshComplaints }) => {
       key: item.id,
       complaintId: item.id,
       referenceCode: item.reference_code || `#${item.id}`,
+      identifier: item.reference_code || (item.id != null ? String(item.id) : ''),
       submittedAt: item.submitted_at,
       date: formatDateTime(item.submitted_at),
       name: item.student_name || 'Anonymous',
@@ -166,7 +167,7 @@ const AdminReports = ({ currentUser, onRefreshComplaints }) => {
               value={search}
               disabled={loading || !!error}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name / ID / date / status"
+              placeholder="Search by name / reference / date / status"
               aria-label="Search reports"
               className="admin-students-search-input"
             />
@@ -225,7 +226,8 @@ const AdminReports = ({ currentUser, onRefreshComplaints }) => {
                     type="button"
                     className="action-btn"
                     title="View Report Incident"
-                    onClick={() => navigate(`/admin/reports/${row.complaintId}`)}
+                    onClick={() => row.identifier && navigate(`/admin/reports/${encodeURIComponent(row.identifier)}`)}
+                    disabled={!row.identifier}
                   >
                     View
                   </button>

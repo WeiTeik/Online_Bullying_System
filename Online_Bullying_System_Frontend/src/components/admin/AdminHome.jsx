@@ -65,7 +65,8 @@ const AdminHome = ({ complaints = [], isLoading, error }) => {
       .slice(0, 5)
       .map((item) => ({
         id: item.id,
-        referenceCode: item.reference_code || `#${item.id}`,
+        referenceCode: item.reference_code || (item.id != null ? `#${item.id}` : ''),
+        identifier: item.reference_code || (item.id != null ? String(item.id) : ''),
         name: item.student_name || 'Anonymous',
         submittedAt: item.submitted_at || item.submittedAt,
         status: item.status || 'new',
@@ -133,8 +134,8 @@ const AdminHome = ({ complaints = [], isLoading, error }) => {
                     <button
                       className="action-btn"
                       title="View Report Incident"
-                      onClick={() => row.id && navigate(`/admin/reports/${row.id}`)}
-                      disabled={!row.id}
+                      onClick={() => row.identifier && navigate(`/admin/reports/${encodeURIComponent(row.identifier)}`)}
+                      disabled={!row.identifier}
                     >
                       View
                     </button>

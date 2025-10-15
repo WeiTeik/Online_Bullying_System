@@ -176,7 +176,7 @@ const AdminDashboard = ({
             }
           />
           <Route
-            path="reports/:reportId"
+            path="reports/:complaintIdentifier"
             element={
               <AdminReportIncident
                 currentUser={currentUser}
