@@ -169,34 +169,72 @@ const hasDangerousDoubleExtension = (filename = '') => {
   return parts.slice(0, -1).some(part => PROHIBITED_ATTACHMENT_EXTENSIONS.has(part));
 };
 
-const evaluateAttachments = (currentFiles, incomingFiles) => {
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error('Missing file reference.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => resolve(event?.target?.result || reader.result);
+    reader.onerror = () => reject(new Error(`Unable to read attachment '${file.name || 'file'}'.`));
+    reader.onabort = () => reject(new Error(`Reading of '${file.name || 'file'}' was aborted.`));
+    reader.readAsDataURL(file);
+  });
+
+const normaliseAttachment = async (file) => {
+  const dataUrl = await readFileAsDataUrl(file);
+  return {
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    dataUrl,
+    lastModified: file.lastModified,
+  };
+};
+
+const evaluateAttachments = async (currentFiles, incomingFiles) => {
   const errors = [];
-  let accepted = Array.isArray(currentFiles) ? [...currentFiles] : [];
+  const accepted = Array.isArray(currentFiles) ? [...currentFiles] : [];
   let totalSize = accepted.reduce((sum, file) => sum + (file?.size || 0), 0);
 
-  incomingFiles.forEach(file => {
-    if (!file) return;
+  for (const file of incomingFiles) {
+    if (!file) continue;
 
-    if (accepted.some(existing => existing.name === file.name && existing.size === file.size && existing.lastModified === file.lastModified)) {
-      return;
+    if (
+      accepted.some(
+        (existing) =>
+          existing.name === file.name &&
+          existing.size === file.size &&
+          existing.lastModified === file.lastModified
+      )
+    ) {
+      continue;
     }
 
     if (accepted.length >= ATTACHMENT_RULES.maxFiles) {
       errors.push(`You can attach up to ${ATTACHMENT_RULES.maxFiles} files per complaint.`);
-      return;
+      break;
     }
 
     const extension = getExtension(file.name);
     const mime = (file.type || '').toLowerCase();
 
-    if (!extension || !ALLOWED_ATTACHMENT_EXTENSIONS.has(extension) || PROHIBITED_ATTACHMENT_EXTENSIONS.has(extension) || hasDangerousDoubleExtension(file.name)) {
-      errors.push(`'${file.name}' is not an accepted file type. Allowed formats: PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT, RTF and common image formats.`);
-      return;
+    if (
+      !extension ||
+      !ALLOWED_ATTACHMENT_EXTENSIONS.has(extension) ||
+      PROHIBITED_ATTACHMENT_EXTENSIONS.has(extension) ||
+      hasDangerousDoubleExtension(file.name)
+    ) {
+      errors.push(
+        `'${file.name}' is not an accepted file type. Allowed formats: PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT, RTF and common image formats.`
+      );
+      continue;
     }
 
-    if (mime && PROHIBITED_ATTACHMENT_MIME_PREFIXES.some(prefix => mime.startsWith(prefix))) {
+    if (mime && PROHIBITED_ATTACHMENT_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix))) {
       errors.push(`'${file.name}' appears to be executable content and is not permitted.`);
-      return;
+      continue;
     }
 
     const mimeAllowed =
@@ -206,27 +244,36 @@ const evaluateAttachments = (currentFiles, incomingFiles) => {
 
     if (!mimeAllowed) {
       errors.push(`'${file.name}' has an unsupported file signature.`);
-      return;
+      continue;
     }
 
     if (!Number.isFinite(file.size) || file.size <= 0) {
       errors.push(`'${file.name}' appears to be empty or corrupt.`);
-      return;
+      continue;
     }
 
     if (file.size > ATTACHMENT_RULES.maxFileBytes) {
-      errors.push(`'${file.name}' exceeds the per-file limit of ${formatBytes(ATTACHMENT_RULES.maxFileBytes)}.`);
-      return;
+      errors.push(
+        `'${file.name}' exceeds the per-file limit of ${formatBytes(ATTACHMENT_RULES.maxFileBytes)}.`
+      );
+      continue;
     }
 
     if (totalSize + file.size > ATTACHMENT_RULES.maxTotalBytes) {
       errors.push(`Total attachment size cannot exceed ${formatBytes(ATTACHMENT_RULES.maxTotalBytes)}.`);
-      return;
+      continue;
     }
 
-    accepted = [...accepted, file];
-    totalSize += file.size;
-  });
+    try {
+      const prepared = await normaliseAttachment(file);
+      accepted.push(prepared);
+      totalSize += file.size;
+    } catch (err) {
+      errors.push(
+        `'${file.name}' could not be processed. Please try again or choose a different file.`
+      );
+    }
+  }
 
   return {
     attachments: accepted,
@@ -268,16 +315,20 @@ function SubmitComplaint({ onSubmit, currentUser }) {
     });
   }, [currentUser]);
 
-  const handleChange = (e) => {
+  const handleChange = async (e) => {
     const { name, value, type, checked, files } = e.target
     if (type === 'file') {
       const selectedFiles = Array.from(files || [])
-      const evaluation = evaluateAttachments(formData.attachments, selectedFiles)
-      setFormData(prev => ({
-        ...prev,
-        attachments: evaluation.attachments
-      }))
-      setAttachmentError(evaluation.errors.length ? evaluation.errors.join(' ') : null)
+      try {
+        const evaluation = await evaluateAttachments(formData.attachments, selectedFiles)
+        setFormData(prev => ({
+          ...prev,
+          attachments: evaluation.attachments
+        }))
+        setAttachmentError(evaluation.errors.length ? evaluation.errors.join(' ') : null)
+      } catch (err) {
+        setAttachmentError(err?.message || 'Unable to process selected attachments.')
+      }
       if (attachmentInputRef.current) {
         attachmentInputRef.current.value = ''
       }
@@ -359,6 +410,7 @@ function SubmitComplaint({ onSubmit, currentUser }) {
         name: file.name,
         size: file.size,
         type: file.type,
+        data: file.dataUrl,
       })),
     }
 

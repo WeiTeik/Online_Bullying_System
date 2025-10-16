@@ -31,9 +31,11 @@ def create_app():
     # ensure upload directories exist
     upload_root = app.config.get("UPLOAD_FOLDER")
     avatar_subdir = app.config.get("AVATAR_SUBDIR", "avatars")
+    complaint_subdir = app.config.get("COMPLAINT_ATTACHMENT_SUBDIR", "complaints")
     if upload_root:
         try:
             os.makedirs(os.path.join(upload_root, avatar_subdir), exist_ok=True)
+            os.makedirs(os.path.join(upload_root, complaint_subdir), exist_ok=True)
         except OSError:
             app.logger.warning("Could not create upload directory at %s", upload_root)
 

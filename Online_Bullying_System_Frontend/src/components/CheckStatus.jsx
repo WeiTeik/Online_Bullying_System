@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { toAbsoluteUrl } from '../services/api';
 
 const formatDateTime = (value) => {
   if (!value) return '—';
@@ -39,6 +40,43 @@ const formatResponseTime = (startValue, endValue) => {
   }
 
   return parts.length > 0 ? parts.join(' ') : 'under 1 minute';
+};
+
+const formatBytes = (bytes) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return null;
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  const formatted = size % 1 === 0 ? size : size.toFixed(1);
+  return `${formatted} ${units[unitIndex]}`;
+};
+
+const resolveAttachmentHref = (attachment) => {
+  if (!attachment) return null;
+  if (typeof attachment === 'string') {
+    const trimmed = attachment.trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('/')) {
+      return toAbsoluteUrl(trimmed);
+    }
+    return null;
+  }
+  const rawUrl =
+    attachment.url ||
+    attachment.href ||
+    attachment.path ||
+    attachment.download_url ||
+    attachment.downloadUrl;
+  return rawUrl ? toAbsoluteUrl(rawUrl) : null;
+};
+
+const buildDownloadHref = (url) => {
+  if (!url) return null;
+  return url.includes('?') ? `${url}&download=1` : `${url}?download=1`;
 };
 
 const normaliseStatus = (status = '') => {
@@ -249,10 +287,33 @@ function ComplaintStatus({ complaints = [], loading, error, onAddComment, curren
                           const label =
                             typeof file === 'string'
                               ? file
-                              : file?.name || 'Attachment';
+                              : file?.name || `Attachment ${idx + 1}`;
+                          const href = resolveAttachmentHref(file);
+                          const downloadHref = buildDownloadHref(href);
+                          const sizeLabel = typeof file === 'object' ? formatBytes(file?.size) : null;
                           return (
-                            <li key={`${complaint.id}-att-${idx}`}>
-                              {label}
+                            <li key={`${complaint.id}-att-${idx}`} className="complaint-attachment-item">
+                              {href ? (
+                                <a href={href} target="_blank" rel="noopener noreferrer">
+                                  {label}
+                                </a>
+                              ) : (
+                                <span>{label}</span>
+                              )}
+                              {sizeLabel ? (
+                                <span className="complaint-attachment-size">{` (${sizeLabel})`}</span>
+                              ) : null}
+                              {href ? (
+                                <span className="complaint-attachment-actions">
+                                  <a href={href} target="_blank" rel="noopener noreferrer">
+                                    View
+                                  </a>
+                                  <span aria-hidden="true">·</span>
+                                  <a href={downloadHref || href} download>
+                                    Download
+                                  </a>
+                                </span>
+                              ) : null}
                             </li>
                           );
                         })}
