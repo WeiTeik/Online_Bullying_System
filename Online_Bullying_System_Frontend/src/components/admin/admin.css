@@ -992,7 +992,9 @@
   color: #6f6481;
 }
 .filter-section select,
-.filter-section input[type="month"] {
+.filter-section input[type="month"],
+.filter-section input[type="date"],
+.filter-section input[type="datetime-local"] {
   border-radius: 10px;
   border: 1px solid #d6c1df;
   padding: 8px 10px;
@@ -1264,6 +1266,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
+    position: relative;
 }
 .admin-students-search {
     background: #fff;
