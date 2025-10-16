@@ -5,6 +5,7 @@ import {
   inviteAdmin as inviteAdminApi,
   updateUser as updateUserApi,
   deleteUser as deleteUserApi,
+  toAbsoluteUrl,
 } from '../../services/api';
 
 const ADMINS_PER_PAGE = 10;
@@ -70,6 +71,7 @@ const AdminMembers = ({ currentUser }) => {
   const [removeInput, setRemoveInput] = useState('');
   const [removeError, setRemoveError] = useState('');
   const [isRemoving, setIsRemoving] = useState(false);
+  const [failedAvatars, setFailedAvatars] = useState({});
 
   const currentRole = roleKey(currentUser?.role);
   const isSuperAdmin = currentRole === 'SUPER_ADMIN';
@@ -316,25 +318,39 @@ const handlePageChange = (page) => {
   }
 };
 
+const getAvatarKey = (entity) => {
+  const idPart = entity?.id != null ? String(entity.id) : '';
+  const avatarPart = entity?.avatar_url || '';
+  return `${idPart}|${avatarPart}`;
+};
+
+const handleAvatarError = (key) => {
+  if (!key) return;
+  setFailedAvatars((prev) => (prev[key] ? prev : { ...prev, [key]: true }));
+};
+
 const renderAvatar = (admin) => {
-    const displayName = getDisplayName(admin);
-    const avatarUrl = admin.avatar_url;
-    const initial = (displayName || 'A').trim().charAt(0).toUpperCase();
-    if (avatarUrl) {
-      return (
-        <img
-          src={avatarUrl}
-          alt={displayName}
-          className="student-avatar"
-        />
-      );
-    }
+  const displayName = getDisplayName(admin);
+  const avatarUrl = toAbsoluteUrl(admin.avatar_url);
+  const avatarKey = getAvatarKey(admin);
+  const hasFailed = avatarKey && failedAvatars[avatarKey];
+  const initial = (displayName || 'A').trim().charAt(0).toUpperCase();
+  if (avatarUrl && !hasFailed) {
     return (
-      <div className="student-avatar student-avatar-fallback" aria-hidden="true">
-        {initial || 'A'}
-      </div>
+      <img
+        src={avatarUrl}
+        alt={displayName}
+        className="student-avatar"
+        onError={() => handleAvatarError(avatarKey)}
+      />
     );
-  };
+  }
+  return (
+    <div className="student-avatar student-avatar-fallback" aria-hidden="true">
+      {initial || 'A'}
+    </div>
+  );
+};
 
   const renderContent = () => {
     if (isLoading) {

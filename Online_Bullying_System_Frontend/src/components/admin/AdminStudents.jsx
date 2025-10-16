@@ -6,6 +6,7 @@ import {
   updateStudent as updateStudentApi,
   resetStudentPassword as resetStudentPasswordApi,
   deleteStudent as deleteStudentApi,
+  toAbsoluteUrl,
 } from '../../services/api';
 
 const STUDENTS_PER_PAGE = 10;
@@ -45,6 +46,7 @@ const AdminStudents = () => {
   const [removeInput, setRemoveInput] = useState('');
   const [removeError, setRemoveError] = useState('');
   const [isRemoving, setIsRemoving] = useState(false);
+  const [failedAvatars, setFailedAvatars] = useState({});
 
   useEffect(() => {
     let isActive = true;
@@ -282,16 +284,30 @@ const AdminStudents = () => {
     }
   };
 
+  const getAvatarKey = (entity) => {
+    const idPart = entity?.id != null ? String(entity.id) : '';
+    const avatarPart = entity?.avatar_url || '';
+    return `${idPart}|${avatarPart}`;
+  };
+
+  const handleAvatarError = (key) => {
+    if (!key) return;
+    setFailedAvatars((prev) => (prev[key] ? prev : { ...prev, [key]: true }));
+  };
+
   const renderAvatar = (student) => {
     const displayName = student.full_name || student.username || student.email || 'Student';
-    const avatarUrl = student.avatar_url;
+    const avatarUrl = toAbsoluteUrl(student.avatar_url);
+    const avatarKey = getAvatarKey(student);
+    const hasFailed = avatarKey && failedAvatars[avatarKey];
     const initial = (displayName || 'S').trim().charAt(0).toUpperCase();
-    if (avatarUrl) {
+    if (avatarUrl && !hasFailed) {
       return (
         <img
           src={avatarUrl}
           alt={displayName}
           className="student-avatar"
+          onError={() => handleAvatarError(avatarKey)}
         />
       );
     }
