@@ -13,7 +13,8 @@ class Config:
     API_KEY = os.getenv('API_KEY')
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', os.path.join(BASE_DIR, 'uploads'))
     AVATAR_SUBDIR = os.getenv('AVATAR_SUBDIR', 'avatars')
-    MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16 MB default
+    COMPLAINT_ATTACHMENT_SUBDIR = os.getenv('COMPLAINT_ATTACHMENT_SUBDIR', 'complaints')
+    MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', 32 * 1024 * 1024))  # allow up to ~32 MB
     MAIL_ENABLED = os.getenv('MAIL_ENABLED', 'True').lower() == 'true'
     MAIL_SERVER = os.getenv('MAIL_SERVER')
     MAIL_PORT = int(os.getenv('MAIL_PORT', 465))

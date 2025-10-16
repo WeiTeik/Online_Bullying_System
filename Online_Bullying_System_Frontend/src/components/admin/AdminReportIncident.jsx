@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import jsPDF from 'jspdf';
-import { getComplaintByIdentifier, addComplaintComment, updateComplaintStatus } from '../../services/api';
+import { getComplaintByIdentifier, addComplaintComment, updateComplaintStatus, toAbsoluteUrl } from '../../services/api';
 
 const formatDateTimeLong = (value) => {
   if (!value) return '—';
@@ -99,6 +99,30 @@ const formatBytes = (bytes) => {
   }
   const formatted = size % 1 === 0 ? size : size.toFixed(1);
   return `${formatted} ${units[idx]}`;
+};
+
+const resolveAttachmentHref = (attachment) => {
+  if (!attachment) return null;
+  if (typeof attachment === 'string') {
+    const trimmed = attachment.trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('/')) {
+      return toAbsoluteUrl(trimmed);
+    }
+    return null;
+  }
+  const raw =
+    attachment.url ||
+    attachment.href ||
+    attachment.path ||
+    attachment.download_url ||
+    attachment.downloadUrl;
+  return raw ? toAbsoluteUrl(raw) : null;
+};
+
+const buildDownloadHref = (url) => {
+  if (!url) return null;
+  return url.includes('?') ? `${url}&download=1` : `${url}?download=1`;
 };
 
 const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
@@ -566,15 +590,54 @@ const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
             <dd>
               {incident.attachments && incident.attachments.length > 0 ? (
                 <ul className="incident-attachments">
-                  {incident.attachments.map((file, idx) => (
-                    <li key={`${file.name}-${idx}`}>
-                      <span className="incident-attachment-icon" aria-hidden="true">📎</span>
-                      <span>{file.name || `Attachment ${idx + 1}`}</span>
-                      {file.size ? (
-                        <span className="incident-attachment-size">{formatBytes(file.size)}</span>
-                      ) : null}
-                    </li>
-                  ))}
+                  {incident.attachments.map((file, idx) => {
+                    const label =
+                      typeof file === 'string' ? file : file?.name || `Attachment ${idx + 1}`;
+                    const href = resolveAttachmentHref(file);
+                    const downloadHref = buildDownloadHref(href);
+                    const sizeLabel =
+                      typeof file === 'object' && Number.isFinite(file?.size)
+                        ? formatBytes(file.size)
+                        : '';
+                    const key =
+                      typeof file === 'object' && file?.stored_name
+                        ? `${file.stored_name}-${idx}`
+                        : `${label}-${idx}`;
+                    const attachmentContent = (
+                      <>
+                        <span className="incident-attachment-icon" aria-hidden="true">📎</span>
+                        <span className="incident-attachment-label">{label}</span>
+                        {sizeLabel ? (
+                          <span className="incident-attachment-size">{sizeLabel}</span>
+                        ) : null}
+                      </>
+                    );
+                    return (
+                      <li key={key} className="incident-attachment-item">
+                        {href ? (
+                          <a
+                            className="incident-attachment-btn incident-attachment-link"
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {attachmentContent}
+                          </a>
+                        ) : (
+                          <div className="incident-attachment-btn incident-attachment-btn--static">
+                            {attachmentContent}
+                          </div>
+                        )}
+                        {href ? (
+                          <div className="incident-attachment-download">
+                            <a href={downloadHref || href} download>
+                              Download copy
+                            </a>
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <span>-</span>

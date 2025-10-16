@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import os
 from datetime import datetime, date, time
 from typing import Any, Dict, List, Optional
+
+from flask import current_app
 
 from app.models import (
     db,
@@ -257,16 +262,105 @@ def _validate_and_prepare_attachments(raw_attachments: Any) -> List[Dict[str, An
                 f"Total attachment size exceeds the {_format_bytes(ATTACHMENT_MAX_TOTAL_SIZE)} limit."
             )
 
+        data_field = raw.get("data") or raw.get("data_url") or raw.get("dataUrl") or raw.get("content")
+        existing_url = (raw.get("url") or raw.get("path") or "").strip() or None
+        stored_name = (raw.get("stored_name") or raw.get("storage_name") or raw.get("filename") or "").strip() or None
+        binary: Optional[bytes] = None
+
+        if data_field:
+            if isinstance(data_field, (bytes, bytearray)):
+                binary = bytes(data_field)
+            elif isinstance(data_field, str):
+                encoded = data_field.split(",", 1)[-1] if "," in data_field else data_field
+                try:
+                    binary = base64.b64decode(encoded, validate=True)
+                except (binascii.Error, ValueError):
+                    raise ValueError(f"Attachment '{name}' data is not valid base64-encoded content.")
+            else:
+                raise ValueError(f"Attachment '{name}' data is invalid.")
+
+        if binary is None and not existing_url:
+            raise ValueError(f"Attachment '{name}' is missing file data.")
+        if binary is not None and len(binary) <= 0:
+            raise ValueError(f"Attachment '{name}' data is empty.")
+
         cleaned.append(
             {
                 "name": safe_name,
+                "original_name": name,
                 "size": size_value,
                 "type": mime or ATTACHMENT_MIME_BY_EXTENSION.get(extension),
+                "data_bytes": binary,
+                "existing_url": existing_url,
+                "stored_name": stored_name,
             }
         )
         total_size += size_value
 
     return cleaned
+
+
+def _reserve_unique_filename(directory: str, filename: str) -> str:
+    base, ext = os.path.splitext(filename)
+    candidate = filename
+    suffix = 1
+    while os.path.exists(os.path.join(directory, candidate)):
+        candidate = f"{base}_{suffix}{ext}"
+        suffix += 1
+    return candidate
+
+
+def _store_complaint_attachments(complaint: Complaint, attachments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not attachments:
+        return []
+
+    upload_root = current_app.config.get("UPLOAD_FOLDER")
+    complaints_dir = current_app.config.get("COMPLAINT_ATTACHMENT_SUBDIR", "complaints")
+    if not upload_root:
+        raise ValueError("Attachment storage is not configured.")
+
+    target_dir = os.path.join(upload_root, complaints_dir, complaint.reference_code)
+    os.makedirs(target_dir, exist_ok=True)
+
+    stored: List[Dict[str, Any]] = []
+    written_paths: List[str] = []
+
+    try:
+        for item in attachments:
+            binary = item.get("data_bytes")
+            stored_name = item.get("stored_name")
+            if binary:
+                candidate_name = _reserve_unique_filename(target_dir, item["name"])
+                file_path = os.path.join(target_dir, candidate_name)
+                with open(file_path, "wb") as fh:
+                    fh.write(binary)
+                written_paths.append(file_path)
+            elif stored_name:
+                candidate_name = stored_name
+                file_path = os.path.join(target_dir, candidate_name)
+                if not os.path.exists(file_path):
+                    raise ValueError(f"Attachment file '{stored_name}' is missing on the server.")
+            else:
+                raise ValueError(f"Attachment '{item.get('original_name') or item.get('name')}' has no file data.")
+
+            stored.append(
+                {
+                    "name": item.get("original_name") or item["name"],
+                    "stored_name": candidate_name,
+                    "size": item["size"],
+                    "type": item["type"],
+                    "url": f"/api/static/complaints/{complaint.reference_code}/{candidate_name}",
+                }
+            )
+    except Exception:
+        for path in written_paths:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        raise
+
+    return stored
 
 
 def _parse_incident_date(value: Optional[str]):
@@ -324,7 +418,7 @@ def create_complaint(data: Dict[str, Any]) -> Complaint:
     base_name = provided_name or (user.username if user else "Unknown Student")
 
     raw_attachments = data.get("attachments") or []
-    attachments = _validate_and_prepare_attachments(raw_attachments)
+    attachments_payload = _validate_and_prepare_attachments(raw_attachments)
 
     status_value = data.get("status", ComplaintStatus.NEW.value)
     if isinstance(status_value, str):
@@ -352,13 +446,21 @@ def create_complaint(data: Dict[str, Any]) -> Complaint:
         room_number=data.get("room_number") or data.get("roomNumber"),
         incident_date=_parse_incident_date(data.get("incident_date") or data.get("incidentDate")),
         witnesses=data.get("witnesses"),
-        attachments=attachments,
+        attachments=[],
         status=status_enum.value if isinstance(status_enum, ComplaintStatus) else status_enum,
         submitted_at=now_kl,
         updated_at=now_kl,
     )
     db.session.add(complaint)
-    db.session.commit()
+
+    try:
+        db.session.flush()
+        stored_attachments = _store_complaint_attachments(complaint, attachments_payload)
+        complaint.attachments = stored_attachments
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
     return complaint
 
 

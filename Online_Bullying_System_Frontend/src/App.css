@@ -1454,6 +1454,32 @@ input:checked + .slider:before {
   padding-left: 1.1rem;
 }
 
+.complaint-attachment-item {
+  margin-bottom: 0.35rem;
+}
+
+.complaint-attachment-size {
+  color: #6c757d;
+  font-size: 0.85rem;
+}
+
+.complaint-attachment-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+  margin-left: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.complaint-attachment-actions a {
+  color: #4b5dff;
+  text-decoration: none;
+}
+
+.complaint-attachment-actions a:hover,
+.complaint-attachment-actions a:focus {
+  text-decoration: underline;
+}
+
 .toggle-comments-btn {
   margin-top: 1rem;
   background: transparent;

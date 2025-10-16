@@ -737,3 +737,22 @@ def api_get_avatar(filename):
 
     target_dir = os.path.join(upload_root, avatar_subdir)
     return send_from_directory(target_dir, filename)
+
+
+@api_bp.route("/static/complaints/<reference_code>/<path:filename>", methods=["GET"])
+def api_get_complaint_attachment(reference_code, filename):
+    upload_root = current_app.config.get("UPLOAD_FOLDER")
+    complaint_subdir = current_app.config.get("COMPLAINT_ATTACHMENT_SUBDIR", "complaints")
+    if not upload_root:
+        return jsonify({"error": "Upload folder not configured"}), 500
+
+    safe_code = secure_filename(reference_code)
+    if not safe_code:
+        return jsonify({"error": "Invalid reference code"}), 400
+
+    target_dir = os.path.join(upload_root, complaint_subdir, safe_code)
+    if not os.path.isdir(target_dir):
+        return jsonify({"error": "Attachment not found"}), 404
+
+    download = request.args.get("download", "").strip().lower() in {"1", "true", "yes", "download"}
+    return send_from_directory(target_dir, filename, as_attachment=download, conditional=True)
