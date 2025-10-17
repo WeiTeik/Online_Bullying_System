@@ -10,6 +10,197 @@ import {
 } from '../services/api';
 
 const MAX_AVATAR_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB
+const PASSWORD_SPECIAL_CHARACTERS = '!@#$%^&*()_+-={}[]:;"\'<>.,?/';
+const COMMON_PASSWORD_PATTERNS = [
+  'password',
+  'passw0rd',
+  'letmein',
+  'welcome',
+  'admin',
+  'root',
+  '123456',
+  '1234567',
+  '12345678',
+  '123456789',
+  '1234567890',
+  'qwerty',
+  'abc123',
+  'iloveyou',
+];
+const KEYBOARD_SEQUENCES = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+const SPECIAL_CHAR_REGEX = new RegExp(`[${escapeRegExp(PASSWORD_SPECIAL_CHARACTERS)}]`);
+
+const normalizePersonalValue = (value) =>
+  (value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const containsPersonalInfo = (password, context = {}) => {
+  const passwordNormalized = normalizePersonalValue(password);
+  if (!passwordNormalized) {
+    return false;
+  }
+  const rawValues = [context.fullName, context.email, context.username].filter(Boolean);
+  const personalValues = [];
+  rawValues.forEach((raw) => {
+    const normalizedFull = normalizePersonalValue(raw);
+    if (normalizedFull) {
+      personalValues.push(normalizedFull);
+    }
+    String(raw)
+      .split(/[\s@._-]+/)
+      .forEach((fragment) => {
+        const normalizedFragment = normalizePersonalValue(fragment);
+        if (normalizedFragment && normalizedFragment.length >= 3) {
+          personalValues.push(normalizedFragment);
+        }
+      });
+  });
+  return personalValues.some((entry) => passwordNormalized.includes(entry));
+};
+
+const hasSequentialCharacters = (value, length = 4) => {
+  if (!value) return false;
+  const normalized = value.toLowerCase();
+  const sequences = [...KEYBOARD_SEQUENCES, 'abcdefghijklmnopqrstuvwxyz', '0123456789'];
+
+  for (const sequence of sequences) {
+    for (let index = 0; index <= sequence.length - length; index += 1) {
+      if (normalized.includes(sequence.slice(index, index + length))) {
+        return true;
+      }
+    }
+  }
+
+  for (let index = 0; index <= normalized.length - length; index += 1) {
+    const window = normalized.slice(index, index + length);
+    let ascending = true;
+    let descending = true;
+    for (let offset = 0; offset < window.length - 1; offset += 1) {
+      if (window.charCodeAt(offset + 1) - window.charCodeAt(offset) !== 1) {
+        ascending = false;
+      }
+      if (window.charCodeAt(offset) - window.charCodeAt(offset + 1) !== 1) {
+        descending = false;
+      }
+    }
+    if (ascending || descending) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const hasRepeatedCharacters = (value, length = 4) => {
+  if (!value) return false;
+  for (let index = 0; index <= value.length - length; index += 1) {
+    const window = value.slice(index, index + length);
+    if (window === window[0].repeat(length)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const EyeIcon = ({ visible }) => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path
+      d="M1 12s4.5-7 11-7 11 7 11 7-4.5 7-11 7S1 12 1 12Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle
+      cx="12"
+      cy="12"
+      r="3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+    {!visible && (
+      <path
+        d="M4 4l16 16"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    )}
+  </svg>
+);
+
+const validateNewPassword = (password, context = {}) => {
+  if (!password) {
+    return 'Password is required.';
+  }
+  if (password.length < 8) {
+    return 'Password must be at least 8 characters long.';
+  }
+  if (!/[A-Z]/.test(password)) {
+    return 'Password must include at least one uppercase letter.';
+  }
+  if (!/[a-z]/.test(password)) {
+    return 'Password must include at least one lowercase letter.';
+  }
+  if (!/[0-9]/.test(password)) {
+    return 'Password must include at least one number.';
+  }
+  if (!SPECIAL_CHAR_REGEX.test(password)) {
+    return 'Password must include at least one special character (! @ # $ % ^ & * ( ) _ + - = { } [ ] : ; " \' < > , . ? /).';
+  }
+  const lowered = password.toLowerCase();
+  if (COMMON_PASSWORD_PATTERNS.includes(lowered)) {
+    return 'Password is too common. Choose something harder to guess.';
+  }
+  if (COMMON_PASSWORD_PATTERNS.some((pattern) => lowered.includes(pattern))) {
+    return "Password should not contain common words like 'password' or '123456'.";
+  }
+  if (containsPersonalInfo(password, context)) {
+    return 'Password must not contain your personal information.';
+  }
+  if (hasSequentialCharacters(password)) {
+    return "Password must not contain sequential patterns like 'abcd' or '1234'.";
+  }
+  if (hasRepeatedCharacters(password)) {
+    return "Password must not contain repeated characters like '1111'.";
+  }
+  return null;
+};
+
+const evaluatePasswordRules = (password, context = {}) => {
+  const value = typeof password === 'string' ? password : '';
+  const hasValue = value.length > 0;
+  const meetsLength = value.length >= 8;
+  const hasUppercase = /[A-Z]/.test(value);
+  const hasLowercase = /[a-z]/.test(value);
+  const hasDigit = /[0-9]/.test(value);
+  const hasSpecial = SPECIAL_CHAR_REGEX.test(value);
+  const lowered = value.toLowerCase();
+  const containsCommonPattern =
+    hasValue && COMMON_PASSWORD_PATTERNS.some((pattern) => lowered.includes(pattern));
+  const containsPersonalDetails = hasValue && containsPersonalInfo(value, context);
+  const containsSequential = hasValue && hasSequentialCharacters(value);
+  const containsRepeated = hasValue && hasRepeatedCharacters(value);
+
+  return {
+    length: meetsLength,
+    uppercase: hasUppercase,
+    lowercase: hasLowercase,
+    digit: hasDigit,
+    special: hasSpecial,
+    common: hasValue && !containsCommonPattern && !containsPersonalDetails,
+    sequence: hasValue && !containsSequential && !containsRepeated,
+  };
+};
 
 const formatDateTime = (value) => {
   if (!value) return '—';
@@ -37,6 +228,9 @@ function StudentProfilePage({
   const [resetMsg, setResetMsg] = useState('');
   const [resetError, setResetError] = useState(null);
   const [isResetting, setIsResetting] = useState(false);
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [user, setUser] = useState(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [profileError, setProfileError] = useState(null);
@@ -53,6 +247,35 @@ function StudentProfilePage({
   const fileInputRef = useRef(null);
   const avatarMenuRef = useRef(null);
   const navigate = useNavigate();
+
+  const passwordContext = {
+    fullName: user?.full_name || currentUser?.full_name,
+    email: user?.email || currentUser?.email,
+    username: user?.username || currentUser?.username,
+  };
+
+  const passwordRuleStatus = evaluatePasswordRules(newPassword, passwordContext);
+
+  const passwordRules = [
+    { id: 'length', label: 'At least 8 characters.', met: passwordRuleStatus.length },
+    {
+      id: 'uppercase',
+      label: 'At least one uppercase letter (A–Z).',
+      met: passwordRuleStatus.uppercase,
+    },
+    {
+      id: 'lowercase',
+      label: 'At least one lowercase letter (a–z).',
+      met: passwordRuleStatus.lowercase,
+    },
+    { id: 'digit', label: 'At least one number (0–9).', met: passwordRuleStatus.digit },
+    {
+      id: 'special',
+      label:
+        'At least one special character',
+      met: passwordRuleStatus.special,
+    },
+  ];
 
   useEffect(() => {
     if (!currentUser) {
@@ -127,6 +350,9 @@ function StudentProfilePage({
       setResetMsg('');
       setResetError(null);
       setIsResetting(false);
+      setShowOldPassword(false);
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
     }
   }, [showReset]);
 
@@ -244,8 +470,14 @@ function StudentProfilePage({
       return;
     }
 
-    if (newPassword.length < 8) {
-      setResetError('New password must be at least 8 characters long.');
+    if (newPassword === oldPassword) {
+      setResetError('New password must be different from the old password.');
+      return;
+    }
+
+    const validationError = validateNewPassword(newPassword, passwordContext);
+    if (validationError) {
+      setResetError(validationError);
       return;
     }
 
@@ -265,6 +497,9 @@ function StudentProfilePage({
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      setShowOldPassword(false);
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
     } catch (err) {
       const message =
         err?.response?.data?.error ||
@@ -591,38 +826,84 @@ function StudentProfilePage({
               <form onSubmit={handleReset}>
                 <div className="form-group">
                   <label className="form-label">Old Password</label>
-                  <input
-                    type="password"
-                    value={oldPassword}
-                    onChange={e => setOldPassword(e.target.value)}
-                    required
-                    className="form-input"
-                    disabled={isResetting}
-                  />
+                  <div className="password-input-wrapper">
+                    <input
+                      type={showOldPassword ? 'text' : 'password'}
+                      value={oldPassword}
+                      onChange={e => setOldPassword(e.target.value)}
+                      required
+                      className="form-input"
+                      disabled={isResetting}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowOldPassword(prev => !prev)}
+                      aria-label={`${showOldPassword ? 'Hide' : 'Show'} old password`}
+                      aria-pressed={showOldPassword}
+                      disabled={isResetting}
+                    >
+                      <EyeIcon visible={showOldPassword} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="reset-row">
                   <div className="reset-col">
                     <label className="form-label">New Password</label>
-                    <input
-                    type="password"
-                    value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
-                    required
-                    className="form-input"
-                    disabled={isResetting}
-                  />
+                    <div className="password-input-wrapper">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        required
+                        className="form-input"
+                        disabled={isResetting}
+                      />
+                      <button
+                        type="button"
+                        className="password-toggle"
+                        onClick={() => setShowNewPassword(prev => !prev)}
+                        aria-label={`${showNewPassword ? 'Hide' : 'Show'} new password`}
+                        aria-pressed={showNewPassword}
+                        disabled={isResetting}
+                      >
+                        <EyeIcon visible={showNewPassword} />
+                      </button>
+                    </div>
+                    <ul className="password-rules">
+                      {passwordRules.map(rule => (
+                        <li
+                          key={rule.id}
+                          className={`password-rule${rule.met ? ' password-rule--met' : ''}`}
+                        >
+                          {rule.label}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                   <div className="reset-col">
                     <label className="form-label">Confirm</label>
-                    <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={e => setConfirmPassword(e.target.value)}
-                      required
-                      className="form-input"
-                      disabled={isResetting}
-                    />
+                    <div className="password-input-wrapper">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        required
+                        className="form-input"
+                        disabled={isResetting}
+                      />
+                      <button
+                        type="button"
+                        className="password-toggle"
+                        onClick={() => setShowConfirmPassword(prev => !prev)}
+                        aria-label={`${showConfirmPassword ? 'Hide' : 'Show'} password confirmation`}
+                        aria-pressed={showConfirmPassword}
+                        disabled={isResetting}
+                      >
+                        <EyeIcon visible={showConfirmPassword} />
+                      </button>
+                    </div>
                   </div>
                 </div>
 

@@ -1,5 +1,6 @@
 from app.models import db, User, UserRole, UserStatus, now_kuala_lumpur
 from sqlalchemy.exc import IntegrityError
+from app.utils.passwords import validate_password_strength
 
 _VALID_USER_STATUSES = {status.value for status in UserStatus}
 
@@ -61,6 +62,9 @@ def create_user(data):
         password = data.get('password')
         if not password:
             return {"error": "Password is required"}, 400
+        validation_error = validate_password_strength(password, user=user)
+        if validation_error:
+            return {"error": validation_error}, 400
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
@@ -94,6 +98,9 @@ def update_user(user_id, data):
         if status_value == UserStatus.PENDING.value and not user.invited_at:
             user.invited_at = now_kuala_lumpur()
     if 'password' in data and data['password']:
+        validation_error = validate_password_strength(data['password'], user=user)
+        if validation_error:
+            return {"error": validation_error}, 400
         user.set_password(data['password'])
     if 'avatar_url' in data:
         user.avatar_url = data['avatar_url']
