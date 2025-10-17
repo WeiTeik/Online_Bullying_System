@@ -36,7 +36,7 @@ from app.crud.admins import (
     AdminInviteError,
     AdminDataError,
 )
-from app.utils.passwords import generate_strong_password
+from app.utils.passwords import generate_strong_password, validate_password_strength
 from app.utils.email import send_email
 from app.utils.two_factor import (
     create_two_factor_challenge,
@@ -422,8 +422,9 @@ def api_change_password(user_id):
     if not user.check_password(old_password):
         return jsonify({"error": "Old password is incorrect."}), 400
 
-    if len(new_password) < 8:
-        return jsonify({"error": "New password must be at least 8 characters long."}), 400
+    validation_error = validate_password_strength(new_password, user=user)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
 
     if new_password == old_password:
         return jsonify({"error": "New password must be different from the old password."}), 400

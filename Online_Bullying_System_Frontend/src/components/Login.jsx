@@ -468,7 +468,7 @@ function LoginModal({
             <>
               <form onSubmit={handleSubmit}>
                 <label>
-                  Email or Username:
+                  Email:
                   <input
                     type="text"
                     value={identifier}
@@ -626,7 +626,7 @@ function LoginPage({
             <form onSubmit={handleSubmit}>
               <div>
                 <label>
-                  Email or Username:
+                  Email:
                   <input
                     type="text"
                     value={identifier}
