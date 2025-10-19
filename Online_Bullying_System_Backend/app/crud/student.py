@@ -96,6 +96,7 @@ def invite_student(full_name: str, email: str) -> Tuple[Dict, str]:
         existing.invited_at = invited_at
         existing.status = UserStatus.PENDING.value
         existing.set_password(temporary_password)
+        existing.last_login_at = None
 
         try:
             db.session.flush()
@@ -240,6 +241,7 @@ def reset_student_password(student_id: int) -> Tuple[Dict, str]:
     temporary_password = generate_strong_password(12)
     student.set_password(temporary_password)
     student.invited_at = now_kuala_lumpur()
+    student.last_login_at = None
 
     try:
         db.session.flush()

@@ -63,6 +63,7 @@ function App() {
   const [twoFactorChallenge, setTwoFactorChallenge] = useState(null)
   const [isTwoFactorLoading, setIsTwoFactorLoading] = useState(false)
   const [twoFactorError, setTwoFactorError] = useState(null)
+  const [twoFactorMessage, setTwoFactorMessage] = useState(null)
 
   // Add this inside App to get the current route
   const location = useLocation();
@@ -100,6 +101,7 @@ function App() {
     setShowUserMenu(false)
     setTwoFactorChallenge(null)
     setTwoFactorError(null)
+    setTwoFactorMessage(null)
     setIsTwoFactorLoading(false)
     setIsAuthLoading(false)
     const landingPath = getRoleLandingPath(user)
@@ -131,7 +133,11 @@ function App() {
           challengeId: response.challenge_id,
           email: response.email,
           expiresIn: response.expires_in,
+          identifier: trimmedIdentifier,
+          requiresPasswordReset: Boolean(response.requires_password_reset),
+          stage: 'code',
         })
+        setTwoFactorMessage(response?.message || 'A verification code has been sent to your email.')
         return
       }
       completeLogin(response)
@@ -146,7 +152,7 @@ function App() {
     }
   }
 
-  const handleVerifyTwoFactor = async (challengeId, code) => {
+  const handleVerifyTwoFactorCode = async (challengeId, code) => {
     if (!challengeId) {
       setTwoFactorError('Missing verification challenge.')
       return
@@ -159,8 +165,26 @@ function App() {
     setIsTwoFactorLoading(true)
     setTwoFactorError(null)
     try {
-      const user = await verifyTwoFactor(challengeId, trimmedCode)
-      completeLogin(user)
+      const result = await verifyTwoFactor({ challengeId, code: trimmedCode })
+      if (result?.requires_password_reset && result?.reset_token) {
+        setTwoFactorChallenge(prev => ({
+          ...(prev || {}),
+          challengeId: prev?.challengeId || challengeId,
+          email: result?.email || prev?.email,
+          expiresIn: prev?.expiresIn,
+          identifier: prev?.identifier,
+          requiresPasswordReset: true,
+          passwordResetToken: result.reset_token,
+          resetExpiresIn: result.expires_in,
+          stage: 'password',
+        }))
+        setTwoFactorMessage(
+          result?.message || 'Verification successful. Please create a new password to continue.'
+        )
+        return
+      }
+      setTwoFactorMessage(null)
+      completeLogin(result)
     } catch (err) {
       const message =
         err?.response?.data?.error ||
@@ -172,9 +196,36 @@ function App() {
     }
   }
 
+  const handleCompleteTwoFactorPassword = async (resetToken, newPassword, confirmPassword) => {
+    if (!resetToken) {
+      setTwoFactorError('Password reset session expired. Please sign in again.')
+      return
+    }
+    setIsTwoFactorLoading(true)
+    setTwoFactorError(null)
+    try {
+      const user = await verifyTwoFactor({
+        resetToken,
+        newPassword,
+        confirmPassword,
+      })
+      setTwoFactorMessage(null)
+      completeLogin(user)
+    } catch (err) {
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        'Unable to update the password. Please try again.'
+      setTwoFactorError(message)
+    } finally {
+      setIsTwoFactorLoading(false)
+    }
+  }
+
   const handleCancelTwoFactor = useCallback(() => {
     setTwoFactorChallenge(null)
     setTwoFactorError(null)
+    setTwoFactorMessage(null)
     setIsTwoFactorLoading(false)
   }, [])
 
@@ -539,8 +590,10 @@ function App() {
                   onGoogleLogin={handleGoogleLogin}
                   onAuthError={setAuthError}
                   pendingTwoFactor={twoFactorChallenge}
-                  onVerifyTwoFactor={handleVerifyTwoFactor}
+                  onVerifyTwoFactorCode={handleVerifyTwoFactorCode}
+                  onCompleteTwoFactorPassword={handleCompleteTwoFactorPassword}
                   twoFactorError={twoFactorError}
+                  twoFactorMessage={twoFactorMessage}
                   isTwoFactorLoading={isTwoFactorLoading}
                   onCancelTwoFactor={handleCancelTwoFactor}
                 />
@@ -578,8 +631,10 @@ function App() {
             onGoogleLogin={handleGoogleLogin}
             onAuthError={setAuthError}
             pendingTwoFactor={twoFactorChallenge}
-            onVerifyTwoFactor={handleVerifyTwoFactor}
+            onVerifyTwoFactorCode={handleVerifyTwoFactorCode}
+            onCompleteTwoFactorPassword={handleCompleteTwoFactorPassword}
             twoFactorError={twoFactorError}
+            twoFactorMessage={twoFactorMessage}
             isTwoFactorLoading={isTwoFactorLoading}
             onCancelTwoFactor={handleCancelTwoFactor}
           />

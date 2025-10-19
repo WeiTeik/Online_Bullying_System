@@ -96,6 +96,7 @@ def invite_admin(full_name: str, email: str, role=None) -> Tuple[Dict, str]:
         existing.invited_at = invited_at
         existing.status = UserStatus.PENDING.value
         existing.set_password(temporary_password)
+        existing.last_login_at = None
 
         try:
             db.session.flush()

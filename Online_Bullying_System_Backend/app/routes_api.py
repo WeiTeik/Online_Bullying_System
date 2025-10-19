@@ -4,6 +4,7 @@ import os
 import re
 import secrets
 import time
+from threading import Lock
 from html import escape as html_escape
 from flask import Blueprint, jsonify, request, current_app, send_from_directory
 from sqlalchemy import func
@@ -56,6 +57,59 @@ api_bp = Blueprint("api", __name__)
 
 
 _USERNAME_SANITIZE_PATTERN = re.compile(r"[^a-zA-Z0-9._-]")
+
+
+PASSWORD_RESET_STAGE_TTL_SECONDS = 10 * 60  # 10 minutes
+_PASSWORD_RESET_TOKENS: dict[str, tuple[int, float]] = {}
+_PASSWORD_RESET_LOCK = Lock()
+
+
+def _cleanup_password_reset_tokens(now: float | None = None) -> None:
+    current = time.time() if now is None else now
+    with _PASSWORD_RESET_LOCK:
+        expired = [
+            token
+            for token, (_, expires_at) in _PASSWORD_RESET_TOKENS.items()
+            if expires_at <= current
+        ]
+        for token in expired:
+            _PASSWORD_RESET_TOKENS.pop(token, None)
+
+
+def _create_password_reset_token(user_id: int) -> tuple[str, int]:
+    _cleanup_password_reset_tokens()
+    token = secrets.token_urlsafe(48)
+    expires_at = time.time() + PASSWORD_RESET_STAGE_TTL_SECONDS
+    with _PASSWORD_RESET_LOCK:
+        stale_tokens = [
+            existing_token
+            for existing_token, (existing_user_id, _) in _PASSWORD_RESET_TOKENS.items()
+            if existing_user_id == user_id
+        ]
+        for stale_token in stale_tokens:
+            _PASSWORD_RESET_TOKENS.pop(stale_token, None)
+        _PASSWORD_RESET_TOKENS[token] = (user_id, expires_at)
+    return token, PASSWORD_RESET_STAGE_TTL_SECONDS
+
+
+def _get_password_reset_user(token: str) -> tuple[int | None, str | None]:
+    if not token:
+        return None, "invalid"
+    now = time.time()
+    with _PASSWORD_RESET_LOCK:
+        entry = _PASSWORD_RESET_TOKENS.get(token)
+        if not entry:
+            return None, "invalid"
+        user_id, expires_at = entry
+        if now >= expires_at:
+            _PASSWORD_RESET_TOKENS.pop(token, None)
+            return None, "expired"
+        return user_id, None
+
+
+def _consume_password_reset_token(token: str) -> None:
+    with _PASSWORD_RESET_LOCK:
+        _PASSWORD_RESET_TOKENS.pop(token, None)
 
 
 def _sanitize_username(value: str) -> str:
@@ -447,6 +501,7 @@ def api_forgot_password():
 
     temporary_password = generate_strong_password(12)
     user.set_password(temporary_password)
+    user.last_login_at = None
     if (user.status or "").lower() == UserStatus.PENDING.value:
         user.status = UserStatus.ACTIVE.value
 
@@ -521,6 +576,7 @@ def api_login():
                     "challenge_id": challenge_id,
                     "email": masked_email,
                     "expires_in": CHALLENGE_TTL_SECONDS,
+                    "requires_password_reset": True,
                     "message": "A verification code has been sent to your email address.",
                 }
             ),
@@ -612,6 +668,53 @@ def api_verify_two_factor():
     data = request.get_json() or {}
     challenge_id = (data.get("challenge_id") or "").strip()
     code = (data.get("code") or "").strip()
+    reset_token = (data.get("reset_token") or "").strip()
+    new_password = (data.get("new_password") or "").strip()
+    confirm_password = (data.get("confirm_password") or "").strip()
+
+    if reset_token:
+        user_id, token_error = _get_password_reset_user(reset_token)
+        if token_error == "invalid":
+            return jsonify({"error": "Password reset session not found. Please sign in again."}), 400
+        if token_error == "expired":
+            return jsonify({"error": "Password reset session expired. Please sign in again."}), 400
+        if new_password != confirm_password:
+            return jsonify({"error": "New password and confirmation do not match."}), 400
+        if not new_password:
+            return jsonify({"error": "New password is required."}), 400
+
+        user = User.query.get(user_id)
+        if not user:
+            _consume_password_reset_token(reset_token)
+            return jsonify({"error": "User account not found."}), 404
+
+        validation_error = validate_password_strength(new_password, user=user)
+        if validation_error:
+            return jsonify({"error": validation_error}), 400
+        if user.check_password(new_password):
+            return jsonify({"error": "New password must be different from the temporary password."}), 400
+
+        try:
+            user.set_password(new_password)
+            db.session.flush()
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            current_app.logger.exception("Failed to persist password reset for user %s: %s", user.id, exc)
+            return jsonify({"error": "Unable to update password at this time."}), 503
+
+        print(
+            f"Two-factor verification successful: user id={user.id} username={user.username} from {request.remote_addr}"
+        )
+        current_app.logger.info(
+            "Two-factor verification successful: user id=%s username=%s from %s",
+            user.id,
+            user.username,
+            request.remote_addr,
+        )
+
+        user_dict = _finalize_successful_login(user)
+        _consume_password_reset_token(reset_token)
+        return jsonify(user_dict), 200
 
     if not challenge_id or not code:
         return jsonify({"error": "Verification code is required."}), 400
@@ -631,6 +734,39 @@ def api_verify_two_factor():
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User account not found."}), 404
+
+    must_reset_password = user.last_login_at is None
+
+    if new_password or confirm_password:
+        if new_password != confirm_password:
+            return jsonify({"error": "New password and confirmation do not match."}), 400
+        validation_error = validate_password_strength(new_password, user=user)
+        if validation_error:
+            return jsonify({"error": validation_error}), 400
+        if user.check_password(new_password):
+            return jsonify({"error": "New password must be different from the temporary password."}), 400
+        user.set_password(new_password)
+        db.session.flush()
+        must_reset_password = False
+
+    if must_reset_password and not new_password:
+        token, ttl_seconds = _create_password_reset_token(user.id)
+        message = "Verification successful. Please set a new password to finish signing in."
+        current_app.logger.info(
+            "Two-factor code verified for user id=%s; awaiting password reset to complete login.", user.id
+        )
+        return (
+            jsonify(
+                {
+                    "requires_password_reset": True,
+                    "reset_token": token,
+                    "expires_in": ttl_seconds,
+                    "email": _mask_email(user.email),
+                    "message": message,
+                }
+            ),
+            200,
+        )
 
     print(f"Two-factor verification successful: user id={user.id} username={user.username} from {request.remote_addr}")
     current_app.logger.info(

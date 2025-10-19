@@ -2,8 +2,45 @@ import React, { useEffect, useRef, useState } from 'react';
 import YouMatterLogo from '../assets/YouMatter_logo_bg_removed.png'; 
 import GoogleLogo from '../assets/google_logo.png';
 import { requestPasswordReset } from '../services/api';
+import { evaluatePasswordRules, validateNewPassword } from '../utils/passwords';
 
 const GOOGLE_SCRIPT_ID = 'google-identity-services';
+
+const EyeIcon = ({ visible }) => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path
+      d="M1 12s4.5-7 11-7 11 7 11 7-4.5 7-11 7S1 12 1 12Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle
+      cx="12"
+      cy="12"
+      r="3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    />
+    {!visible && (
+      <path
+        d="M4 4l16 16"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    )}
+  </svg>
+);
 
 function GoogleSignInButton({ onCredential, onError, isLoading, variant = 'page' }) {
   const buttonHostRef = useRef(null);
@@ -286,53 +323,236 @@ function ForgotPasswordForm({
 
 function TwoFactorForm({
   email,
-  onSubmit,
+  onSubmitCode,
+  onSubmitPassword,
   onCancel,
   isLoading,
   error,
+  message,
   variant = 'page',
+  stage = 'code',
+  requiresPasswordReset = false,
+  passwordContext = {},
 }) {
   const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [localError, setLocalError] = useState('');
+
+  useEffect(() => {
+    setLocalError('');
+    if (stage === 'code') {
+      setCode('');
+    } else {
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
+    }
+  }, [stage]);
 
   const handleCodeChange = (event) => {
     const nextValue = event.target.value.replace(/\D/g, '').slice(0, 6);
     setCode(nextValue);
+    if (localError) {
+      setLocalError('');
+    }
   };
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    onSubmit(code);
+  const handleNewPasswordChange = (event) => {
+    setNewPassword(event.target.value);
+    if (localError) {
+      setLocalError('');
+    }
   };
+
+  const handleConfirmPasswordChange = (event) => {
+    setConfirmPassword(event.target.value);
+    if (localError) {
+      setLocalError('');
+    }
+  };
+
+  const isPasswordStage = stage === 'password';
+  const passwordRuleStatus = isPasswordStage
+    ? evaluatePasswordRules(newPassword, passwordContext)
+    : {};
+  const passwordRules = isPasswordStage
+    ? [
+        { id: 'length', label: 'At least 8 characters.', met: passwordRuleStatus.length },
+        {
+          id: 'uppercase',
+          label: 'At least one uppercase letter (A–Z).',
+          met: passwordRuleStatus.uppercase,
+        },
+        {
+          id: 'lowercase',
+          label: 'At least one lowercase letter (a–z).',
+          met: passwordRuleStatus.lowercase,
+        },
+        { id: 'digit', label: 'At least one number (0–9).', met: passwordRuleStatus.digit },
+        {
+          id: 'special',
+          label: 'At least one special character',
+          met: passwordRuleStatus.special,
+        },
+      ]
+    : [];
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (isLoading) {
+      return;
+    }
+    if (isPasswordStage) {
+      let validationMessage = validateNewPassword(newPassword, passwordContext);
+      if (!validationMessage && newPassword !== confirmPassword) {
+        validationMessage = 'Password confirmation does not match.';
+      }
+      if (validationMessage) {
+        setLocalError(validationMessage);
+        return;
+      }
+      setLocalError('');
+      if (typeof onSubmitPassword === 'function') {
+        await onSubmitPassword(newPassword, confirmPassword);
+      }
+      return;
+    }
+
+    if (!code || code.length !== 6) {
+      setLocalError('Please enter the 6-digit verification code.');
+      return;
+    }
+    setLocalError('');
+    if (typeof onSubmitCode === 'function') {
+      await onSubmitCode(code);
+    }
+  };
+
+  const submitDisabled =
+    isLoading ||
+    (isPasswordStage
+      ? !newPassword || !confirmPassword
+      : code.length !== 6);
 
   const formClassName = `two-factor-form two-factor-form--${variant}`;
 
   return (
     <form onSubmit={handleSubmit} className={formClassName}>
       <div className="two-factor-copy">
-        <p>Enter the six-digit code we just sent to your email to finish signing in.</p>
-        {email && (
-          <p className="two-factor-email">
-            Code sent to <strong>{email}</strong>.
-          </p>
+        {isPasswordStage ? (
+          <p>Create a new password to finish signing in.</p>
+        ) : (
+          <>
+            <p>Enter the six-digit code we just sent to your email to finish signing in.</p>
+            {email && (
+              <p className="two-factor-email">
+                Code sent to <strong>{email}</strong>.
+              </p>
+            )}
+            {requiresPasswordReset && (
+              <p className="two-factor-email">
+                After verifying the code, you’ll be prompted to set a new password.
+              </p>
+            )}
+          </>
         )}
       </div>
-      <label className="two-factor-label">
-        <span>Enter 6-digit code</span>
-        <input
-          type="text"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          pattern="[0-9]{6}"
-          maxLength={6}
-          value={code}
-          onChange={handleCodeChange}
-          disabled={isLoading}
-          required
-        />
-      </label>
+
+      {message && (
+        <p className="login-success" role="status">
+          {message}
+        </p>
+      )}
+
+      {isPasswordStage ? (
+        <div className="reset-row">
+          <div className="reset-col">
+            <label className="form-label">New Password</label>
+            <div className="password-input-wrapper">
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={handleNewPasswordChange}
+                required
+                className="form-input"
+                disabled={isLoading}
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowNewPassword((prev) => !prev)}
+                aria-pressed={showNewPassword}
+                aria-label={`${showNewPassword ? 'Hide' : 'Show'} new password`}
+                disabled={isLoading}
+              >
+                <EyeIcon visible={showNewPassword} />
+              </button>
+            </div>
+            <ul className="password-rules">
+              {passwordRules.map((rule) => (
+                <li
+                  key={rule.id}
+                  className={`password-rule${rule.met ? ' password-rule--met' : ''}`}
+                >
+                  {rule.label}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="reset-col">
+            <label className="form-label">Confirm Password</label>
+            <div className="password-input-wrapper">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={handleConfirmPasswordChange}
+                required
+                className="form-input"
+                disabled={isLoading}
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                aria-pressed={showConfirmPassword}
+                aria-label={`${showConfirmPassword ? 'Hide' : 'Show'} password confirmation`}
+                disabled={isLoading}
+              >
+                <EyeIcon visible={showConfirmPassword} />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <label className="two-factor-label">
+          <span>Enter 6-digit code</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            value={code}
+            onChange={handleCodeChange}
+            disabled={isLoading}
+            required
+          />
+        </label>
+      )}
+
       <div className="two-factor-actions">
-        <button className="two-factor-submit" type="submit" disabled={isLoading || code.length !== 6}>
-          {isLoading ? 'Verifying...' : 'Verify code'}
+        <button className="two-factor-submit" type="submit" disabled={submitDisabled}>
+          {isLoading
+            ? isPasswordStage
+              ? 'Saving...'
+              : 'Verifying...'
+            : isPasswordStage
+              ? 'Set password'
+              : 'Verify code'}
         </button>
         <button
           type="button"
@@ -343,9 +563,9 @@ function TwoFactorForm({
           Back to Login
         </button>
       </div>
-      {error && (
+      {(localError || error) && (
         <p className="login-error" role="alert">
-          {error}
+          {localError || error}
         </p>
       )}
     </form>
@@ -361,8 +581,10 @@ function LoginModal({
   onGoogleLogin,
   onAuthError,
   pendingTwoFactor,
-  onVerifyTwoFactor,
+  onVerifyTwoFactorCode,
+  onCompleteTwoFactorPassword,
   twoFactorError,
+  twoFactorMessage,
   isTwoFactorLoading,
   onCancelTwoFactor,
 }) {
@@ -377,6 +599,7 @@ function LoginModal({
     reset: resetForgotState,
   } = useForgotPasswordRequest()
   const isTwoFactorActive = Boolean(pendingTwoFactor?.challengeId)
+  const isAwaitingPasswordReset = Boolean(pendingTwoFactor?.passwordResetToken)
   const isForgotPasswordActive = isForgotPassword && !isTwoFactorActive
 
   useEffect(() => {
@@ -449,7 +672,26 @@ function LoginModal({
             <TwoFactorForm
               variant="modal"
               email={maskedEmail}
-              onSubmit={(code) => onVerifyTwoFactor?.(pendingTwoFactor.challengeId, code)}
+              stage={isAwaitingPasswordReset ? 'password' : 'code'}
+              message={twoFactorMessage}
+              requiresPasswordReset={Boolean(pendingTwoFactor?.requiresPasswordReset)}
+              passwordContext={{
+                email:
+                  pendingTwoFactor?.identifier && pendingTwoFactor.identifier.includes('@')
+                    ? pendingTwoFactor.identifier
+                    : '',
+                username: pendingTwoFactor?.identifier || identifier,
+              }}
+              onSubmitCode={(code) =>
+                onVerifyTwoFactorCode?.(pendingTwoFactor?.challengeId, code)
+              }
+              onSubmitPassword={(newPassword, confirmPassword) =>
+                onCompleteTwoFactorPassword?.(
+                  pendingTwoFactor?.passwordResetToken,
+                  newPassword,
+                  confirmPassword
+                )
+              }
               onCancel={handleReturnToLogin}
               isLoading={isTwoFactorLoading}
               error={twoFactorError}
@@ -523,8 +765,10 @@ function LoginPage({
   onGoogleLogin,
   onAuthError,
   pendingTwoFactor,
-  onVerifyTwoFactor,
+  onVerifyTwoFactorCode,
+  onCompleteTwoFactorPassword,
   twoFactorError,
+  twoFactorMessage,
   isTwoFactorLoading,
   onCancelTwoFactor,
 }) {
@@ -539,6 +783,7 @@ function LoginPage({
     reset: resetForgotState,
   } = useForgotPasswordRequest()
   const isTwoFactorActive = Boolean(pendingTwoFactor?.challengeId)
+  const isAwaitingPasswordReset = Boolean(pendingTwoFactor?.passwordResetToken)
   const isForgotPasswordActive = isForgotPassword && !isTwoFactorActive
 
   useEffect(() => {
@@ -606,7 +851,26 @@ function LoginPage({
           <TwoFactorForm
             variant="page"
             email={maskedEmail}
-            onSubmit={(code) => onVerifyTwoFactor?.(pendingTwoFactor.challengeId, code)}
+            stage={isAwaitingPasswordReset ? 'password' : 'code'}
+            message={twoFactorMessage}
+            requiresPasswordReset={Boolean(pendingTwoFactor?.requiresPasswordReset)}
+            passwordContext={{
+              email:
+                pendingTwoFactor?.identifier && pendingTwoFactor.identifier.includes('@')
+                  ? pendingTwoFactor.identifier
+                  : '',
+              username: pendingTwoFactor?.identifier || identifier,
+            }}
+            onSubmitCode={(code) =>
+              onVerifyTwoFactorCode?.(pendingTwoFactor?.challengeId, code)
+            }
+            onSubmitPassword={(newPassword, confirmPassword) =>
+              onCompleteTwoFactorPassword?.(
+                pendingTwoFactor?.passwordResetToken,
+                newPassword,
+                confirmPassword
+              )
+            }
             onCancel={handleReturnToLogin}
             isLoading={isTwoFactorLoading}
             error={twoFactorError}

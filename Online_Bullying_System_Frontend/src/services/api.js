@@ -31,8 +31,27 @@ export async function loginWithGoogle(idToken) {
   return res.data;
 }
 
-export async function verifyTwoFactor(challengeId, code) {
-  const res = await api.post("/auth/verify-2fa", { challenge_id: challengeId, code });
+export async function verifyTwoFactor({
+  challengeId,
+  code,
+  newPassword,
+  confirmPassword,
+  resetToken,
+} = {}) {
+  const payload = {};
+  if (resetToken) {
+    payload.reset_token = resetToken;
+  } else {
+    payload.challenge_id = challengeId;
+    payload.code = code;
+  }
+  if (typeof newPassword === "string") {
+    payload.new_password = newPassword;
+  }
+  if (typeof confirmPassword === "string") {
+    payload.confirm_password = confirmPassword;
+  }
+  const res = await api.post("/auth/verify-2fa", payload);
   return res.data;
 }
 
