@@ -2,45 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import YouMatterLogo from '../assets/YouMatter_logo_bg_removed.png'; 
 import GoogleLogo from '../assets/google_logo.png';
 import { requestPasswordReset } from '../services/api';
-import { evaluatePasswordRules, validateNewPassword } from '../utils/passwords';
+import { getPasswordRuleChecklist, validateNewPassword } from '../utils/passwords';
+import EyeIcon from './EyeIcon';
 
 const GOOGLE_SCRIPT_ID = 'google-identity-services';
-
-const EyeIcon = ({ visible }) => (
-  <svg
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-    focusable="false"
-  >
-    <path
-      d="M1 12s4.5-7 11-7 11 7 11 7-4.5 7-11 7S1 12 1 12Z"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <circle
-      cx="12"
-      cy="12"
-      r="3.5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    />
-    {!visible && (
-      <path
-        d="M4 4l16 16"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    )}
-  </svg>
-);
 
 function GoogleSignInButton({ onCredential, onError, isLoading, variant = 'page' }) {
   const buttonHostRef = useRef(null);
@@ -376,30 +341,7 @@ function TwoFactorForm({
   };
 
   const isPasswordStage = stage === 'password';
-  const passwordRuleStatus = isPasswordStage
-    ? evaluatePasswordRules(newPassword, passwordContext)
-    : {};
-  const passwordRules = isPasswordStage
-    ? [
-        { id: 'length', label: 'At least 8 characters.', met: passwordRuleStatus.length },
-        {
-          id: 'uppercase',
-          label: 'At least one uppercase letter (A–Z).',
-          met: passwordRuleStatus.uppercase,
-        },
-        {
-          id: 'lowercase',
-          label: 'At least one lowercase letter (a–z).',
-          met: passwordRuleStatus.lowercase,
-        },
-        { id: 'digit', label: 'At least one number (0–9).', met: passwordRuleStatus.digit },
-        {
-          id: 'special',
-          label: 'At least one special character',
-          met: passwordRuleStatus.special,
-        },
-      ]
-    : [];
+  const passwordRules = isPasswordStage ? getPasswordRuleChecklist(newPassword, passwordContext) : [];
 
   const handleSubmit = async (event) => {
     event.preventDefault();

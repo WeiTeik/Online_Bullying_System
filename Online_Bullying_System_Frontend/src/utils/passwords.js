@@ -154,10 +154,27 @@ const evaluatePasswordRules = (password, context = {}) => {
   };
 };
 
+const PASSWORD_RULE_ITEMS = [
+  { id: 'length', label: 'At least 8 characters.' },
+  { id: 'uppercase', label: 'At least one uppercase letter (A–Z).' },
+  { id: 'lowercase', label: 'At least one lowercase letter (a–z).' },
+  { id: 'digit', label: 'At least one number (0–9).' },
+  { id: 'special', label: 'At least one special character' },
+];
+
+const getPasswordRuleChecklist = (password, context = {}) => {
+  const status = evaluatePasswordRules(password, context);
+  return PASSWORD_RULE_ITEMS.map((rule) => ({
+    ...rule,
+    met: Boolean(status[rule.id]),
+  }));
+};
+
 export {
   PASSWORD_SPECIAL_CHARACTERS,
   COMMON_PASSWORD_PATTERNS,
   SPECIAL_CHAR_REGEX,
   validateNewPassword,
   evaluatePasswordRules,
+  getPasswordRuleChecklist,
 };
