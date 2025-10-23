@@ -14,6 +14,22 @@ if (API_KEY) {
   api.defaults.headers.common["X-API-Key"] = API_KEY;
 }
 
+// Preload persisted session token so first request is authenticated after refresh.
+if (typeof window !== "undefined") {
+  const storedSessionRaw = window.localStorage.getItem("obs.session");
+  if (storedSessionRaw) {
+    try {
+      const parsed = JSON.parse(storedSessionRaw);
+      if (parsed?.token) {
+        api.defaults.headers.common["Authorization"] = `Bearer ${parsed.token}`;
+      }
+    } catch (error) {
+      console.warn("Failed to parse stored session token; clearing it.", error);
+      window.localStorage.removeItem("obs.session");
+    }
+  }
+}
+
 // Optional: set auth token for protected endpoints
 export function setAuthToken(token) {
   if (token) api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
@@ -23,6 +39,11 @@ export function setAuthToken(token) {
 // Auth
 export async function login(identifier, password) {
   const res = await api.post("/auth/login", { email: identifier, username: identifier, password });
+  return res.data;
+}
+
+export async function logout() {
+  const res = await api.post("/auth/logout");
   return res.data;
 }
 
