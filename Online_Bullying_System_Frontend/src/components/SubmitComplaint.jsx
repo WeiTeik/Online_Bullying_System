@@ -422,10 +422,25 @@ function SubmitComplaint({ onSubmit, currentUser }) {
       resetForm()
       setSubmitSuccess('Complaint submitted successfully.')
     } catch (err) {
-      const message =
-        err?.response?.data?.error ||
+      const responseData = err?.response?.data || {}
+      let message =
+        responseData.message ||
+        responseData.error ||
         err?.message ||
         'Unable to submit complaint. Please try again.'
+      const fields = Array.isArray(responseData.fields) ? responseData.fields : null
+      if (fields && fields.length) {
+        message = `${message} (Fields: ${fields.join(', ')})`
+      }
+      const retryAfterHeader = err?.response?.headers?.['retry-after']
+      const retryAfterPayload = responseData.retry_after
+      const retryAfter = retryAfterHeader || retryAfterPayload
+      if (retryAfter) {
+        const retrySeconds = Number.parseInt(retryAfter, 10)
+        if (Number.isFinite(retrySeconds) && retrySeconds > 0) {
+          message = `${message} Please wait ${retrySeconds} seconds and try again.`
+        }
+      }
       setSubmitError(message)
     } finally {
       setIsSubmitting(false)
