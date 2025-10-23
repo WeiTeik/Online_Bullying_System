@@ -1,9 +1,12 @@
 import base64
 import binascii
+import hashlib
+import json
 import os
 import re
 import secrets
 import time
+from collections import deque
 from threading import Lock
 from html import escape as html_escape
 from flask import Blueprint, jsonify, request, current_app, send_from_directory
@@ -54,6 +57,218 @@ from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 
 api_bp = Blueprint("api", __name__)
+
+
+@api_bp.before_request
+def _require_api_key():
+    """Reject requests missing the configured API key header."""
+    if request.method == "OPTIONS":
+        return None
+    if request.path.startswith("/api/static/"):
+        return None
+    api_key = current_app.config.get("API_KEY")
+    if not api_key:
+        return None
+    request_key = request.headers.get("X-API-Key")
+    if not request_key:
+        return jsonify({"error": "missing_api_key"}), 401
+    try:
+        if not secrets.compare_digest(request_key, api_key):
+            return jsonify({"error": "invalid_api_key"}), 401
+    except TypeError:
+        # secrets.compare_digest raises if the inputs are different types
+        return jsonify({"error": "invalid_api_key"}), 401
+    return None
+
+
+_COMPLAINT_RATE_LIMIT_WINDOW_SECONDS = 60  # 1 minute sliding window
+_COMPLAINT_RATE_LIMIT_MAX_REQUESTS = 5
+_COMPLAINT_RATE_LIMIT_BUCKETS: dict[str, deque[float]] = {}
+_COMPLAINT_RATE_LIMIT_LOCK = Lock()
+
+_COMPLAINT_DUPLICATE_WINDOW_SECONDS = 60 * 30  # 30 minutes
+_COMPLAINT_FINGERPRINTS: dict[str, float] = {}
+_COMPLAINT_FINGERPRINT_LOCK = Lock()
+
+_SUSPICIOUS_CONTENT_PATTERNS = (
+    re.compile(r"<\s*script", re.IGNORECASE),
+    re.compile(r"javascript\s*:", re.IGNORECASE),
+    re.compile(r"on\w+\s*=", re.IGNORECASE),
+    re.compile(r"document\.cookie", re.IGNORECASE),
+    re.compile(r"window\.location", re.IGNORECASE),
+)
+
+
+def _extract_client_identifier() -> str:
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        first_ip = forwarded_for.split(",", 1)[0].strip()
+        if first_ip:
+            return first_ip
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    return request.remote_addr or "unknown"
+
+
+def _enforce_complaint_rate_limit():
+    payload = request.get_json(silent=True) or {}
+    identifiers = {f"ip:{_extract_client_identifier()}"}
+    user_id = payload.get("user_id")
+    if user_id:
+        identifiers.add(f"user:{user_id}")
+
+    now = time.time()
+    retry_after = 0
+    with _COMPLAINT_RATE_LIMIT_LOCK:
+        for identifier in identifiers:
+            bucket = _COMPLAINT_RATE_LIMIT_BUCKETS.setdefault(identifier, deque())
+            while bucket and now - bucket[0] > _COMPLAINT_RATE_LIMIT_WINDOW_SECONDS:
+                bucket.popleft()
+            if len(bucket) >= _COMPLAINT_RATE_LIMIT_MAX_REQUESTS:
+                retry_after = max(
+                    retry_after,
+                    int(max(1, _COMPLAINT_RATE_LIMIT_WINDOW_SECONDS - (now - bucket[0]))),
+                )
+            else:
+                bucket.append(now)
+    if retry_after:
+        return True, {
+            "error": "rate_limited",
+            "message": "Too many complaints submitted. Please wait before submitting another report.",
+            "retry_after": retry_after,
+        }
+    return False, None
+
+
+def _normalize_payload_value(value: object) -> str:
+    if value is None:
+        return ""
+    normalized = str(value).strip()
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized
+
+
+def _fingerprint_complaint_payload(payload):
+    normalized = {
+        "anonymous": bool(payload.get("anonymous")),
+        "student_name": _normalize_payload_value(payload.get("student_name")).lower(),
+        "incident_type": _normalize_payload_value(
+            payload.get("incident_type") or payload.get("incidentType")
+        ).lower(),
+        "description": _normalize_payload_value(payload.get("description")).lower(),
+        "room_number": _normalize_payload_value(
+            payload.get("room_number") or payload.get("roomNumber")
+        ).lower(),
+        "incident_date": _normalize_payload_value(
+            payload.get("incident_date") or payload.get("incidentDate")
+        ),
+        "witnesses": _normalize_payload_value(payload.get("witnesses")).lower(),
+        "anonymous_flag": bool(payload.get("anonymous")),
+    }
+
+    attachments = payload.get("attachments")
+    attachment_fingerprint: list[str] = []
+    if isinstance(attachments, list):
+        for attachment in attachments:
+            if not isinstance(attachment, dict):
+                continue
+            name = _normalize_payload_value(attachment.get("name")).lower()
+            size = attachment.get("size")
+            try:
+                size_value = int(size)
+            except (TypeError, ValueError):
+                size_value = 0
+            attachment_fingerprint.append(f"{name}:{size_value}")
+    if attachment_fingerprint:
+        attachment_fingerprint.sort()
+    normalized["attachments"] = attachment_fingerprint
+
+    serialized = json.dumps(normalized, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _check_duplicate_complaint(payload):
+    fingerprint = None
+    if not isinstance(payload, dict):
+        return False, fingerprint
+    fingerprint = _fingerprint_complaint_payload(payload)
+    now = time.time()
+    with _COMPLAINT_FINGERPRINT_LOCK:
+        expired = [
+            key
+            for key, timestamp in _COMPLAINT_FINGERPRINTS.items()
+            if now - timestamp > _COMPLAINT_DUPLICATE_WINDOW_SECONDS
+        ]
+        for key in expired:
+            _COMPLAINT_FINGERPRINTS.pop(key, None)
+        if fingerprint in _COMPLAINT_FINGERPRINTS:
+            return True, fingerprint
+    return False, fingerprint
+
+
+def _register_complaint_fingerprint(fingerprint):
+    if not fingerprint:
+        return
+    now = time.time()
+    with _COMPLAINT_FINGERPRINT_LOCK:
+        _COMPLAINT_FINGERPRINTS[fingerprint] = now
+
+
+def _detect_suspicious_complaint_content(payload):
+    suspicious_fields = []
+    if not isinstance(payload, dict):
+        return suspicious_fields
+
+    fields_to_check = (
+        "student_name",
+        "incident_type",
+        "incidentType",
+        "description",
+        "room_number",
+        "roomNumber",
+        "witnesses",
+        "notes",
+    )
+    for field in fields_to_check:
+        value = payload.get(field)
+        if not isinstance(value, str):
+            continue
+        trimmed = value.strip()
+        for pattern in _SUSPICIOUS_CONTENT_PATTERNS:
+            if pattern.search(trimmed):
+                suspicious_fields.append(field)
+                break
+    attachments = payload.get("attachments")
+    if isinstance(attachments, list):
+        for index, attachment in enumerate(attachments):
+            if not isinstance(attachment, dict):
+                continue
+            name = attachment.get("name")
+            if isinstance(name, str):
+                for pattern in _SUSPICIOUS_CONTENT_PATTERNS:
+                    if pattern.search(name):
+                        suspicious_fields.append(f"attachments[{index}].name")
+                        break
+    return suspicious_fields
+
+
+@api_bp.before_request
+def _protect_complaint_submission():
+    if request.method != "POST":
+        return None
+    normalized_path = request.path or ""
+    if normalized_path.rstrip("/") != "/api/complaints":
+        return None
+    limited, payload = _enforce_complaint_rate_limit()
+    if limited and payload:
+        retry_after = payload.pop("retry_after", None)
+        response = jsonify(payload)
+        response.status_code = 429
+        if retry_after:
+            response.headers["Retry-After"] = str(retry_after)
+        return response
+    return None
 
 
 _USERNAME_SANITIZE_PATTERN = re.compile(r"[^a-zA-Z0-9._-]")
@@ -410,6 +625,32 @@ def api_get_complaint(complaint_identifier):
 @api_bp.route("/complaints", methods=["POST"])
 def api_create_complaint():
     data = request.get_json() or {}
+    suspicious_fields = _detect_suspicious_complaint_content(data)
+    if suspicious_fields:
+        return (
+            jsonify(
+                {
+                    "error": "invalid_content",
+                    "message": "Complaint submission rejected due to suspicious content.",
+                    "fields": suspicious_fields,
+                }
+            ),
+            400,
+        )
+
+    is_duplicate, fingerprint = _check_duplicate_complaint(data)
+    if is_duplicate:
+        return (
+            jsonify(
+                {
+                    "error": "duplicate_submission",
+                    "message": "An identical complaint was recently submitted. "
+                    "Please wait or include additional details before submitting again.",
+                }
+            ),
+            409,
+        )
+
     try:
         complaint = create_complaint(data)
     except ValueError as exc:
@@ -417,6 +658,7 @@ def api_create_complaint():
     except Exception as exc:  # broad but ensures we return json
         current_app.logger.exception("Failed to create complaint: %s", exc)
         return jsonify({"error": "Unable to create complaint"}), 400
+    _register_complaint_fingerprint(fingerprint)
     return jsonify(complaint.to_dict(include_comments=True)), 201
 
 

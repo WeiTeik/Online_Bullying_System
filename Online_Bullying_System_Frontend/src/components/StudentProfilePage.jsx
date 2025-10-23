@@ -10,46 +10,11 @@ import {
 } from '../services/api';
 import {
   validateNewPassword,
-  evaluatePasswordRules,
+  getPasswordRuleChecklist,
 } from '../utils/passwords';
+import EyeIcon from './EyeIcon';
 
 const MAX_AVATAR_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB
-
-const EyeIcon = ({ visible }) => (
-  <svg
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-    focusable="false"
-  >
-    <path
-      d="M1 12s4.5-7 11-7 11 7 11 7-4.5 7-11 7S1 12 1 12Z"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <circle
-      cx="12"
-      cy="12"
-      r="3.5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    />
-    {!visible && (
-      <path
-        d="M4 4l16 16"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    )}
-  </svg>
-);
 
 const formatDateTime = (value) => {
   if (!value) return '—';
@@ -103,28 +68,7 @@ function StudentProfilePage({
     username: user?.username || currentUser?.username,
   };
 
-  const passwordRuleStatus = evaluatePasswordRules(newPassword, passwordContext);
-
-  const passwordRules = [
-    { id: 'length', label: 'At least 8 characters.', met: passwordRuleStatus.length },
-    {
-      id: 'uppercase',
-      label: 'At least one uppercase letter (A–Z).',
-      met: passwordRuleStatus.uppercase,
-    },
-    {
-      id: 'lowercase',
-      label: 'At least one lowercase letter (a–z).',
-      met: passwordRuleStatus.lowercase,
-    },
-    { id: 'digit', label: 'At least one number (0–9).', met: passwordRuleStatus.digit },
-    {
-      id: 'special',
-      label:
-        'At least one special character',
-      met: passwordRuleStatus.special,
-    },
-  ];
+  const passwordRules = getPasswordRuleChecklist(newPassword, passwordContext);
 
   useEffect(() => {
     if (!currentUser) {

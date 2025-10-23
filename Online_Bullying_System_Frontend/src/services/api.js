@@ -9,6 +9,11 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+const API_KEY = process.env.REACT_APP_API_KEY;
+if (API_KEY) {
+  api.defaults.headers.common["X-API-Key"] = API_KEY;
+}
+
 // Optional: set auth token for protected endpoints
 export function setAuthToken(token) {
   if (token) api.defaults.headers.common["Authorization"] = `Bearer ${token}`;

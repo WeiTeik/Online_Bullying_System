@@ -428,10 +428,13 @@ function App() {
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isLoginRoute = location.pathname === '/login';
 
-  const avatarInitial = (currentUser?.username || currentUser?.email || 'U')
-    .charAt(0)
-    .toUpperCase()
-  const avatarLabel = currentUser?.username || currentUser?.email || 'User'
+  const rawFullName = (currentUser?.full_name || '').trim()
+  const rawUsername = (currentUser?.username || '').trim()
+  const rawEmail = (currentUser?.email || '').trim()
+  const displayName = rawFullName || rawUsername || rawEmail || 'User'
+  const avatarInitialSource = rawFullName || rawUsername || rawEmail || 'U'
+  const avatarInitial = avatarInitialSource.charAt(0).toUpperCase()
+  const avatarLabel = displayName
   const avatarUrl = currentUser?.avatar_url ? toAbsoluteUrl(currentUser.avatar_url) : null
 
   return (
@@ -498,8 +501,8 @@ function App() {
                     aria-expanded={isMobileView ? undefined : showUserMenu}
                     aria-label={
                       isMobileView
-                        ? `View profile for ${avatarLabel}`
-                        : `Account menu for ${avatarLabel}`
+                        ? `View profile for ${displayName}`
+                        : `Account menu for ${displayName}`
                     }
                   >
                     {avatarUrl ? (
@@ -515,7 +518,7 @@ function App() {
                   {!isMobileView && showUserMenu && (
                     <div className="user-dropdown" role="menu">
                       <div className="user-dropdown__header">
-                        <span className="user-name">{currentUser.username}</span>
+                        <span className="user-name">{displayName}</span>
                         <span className="user-email">{currentUser.email}</span>
                       </div>
                       <button type="button" onClick={handleViewProfile} role="menuitem">
