@@ -26,3 +26,10 @@ class Config:
     MAIL_TIMEOUT = int(os.getenv('MAIL_TIMEOUT', 30))
     PORTAL_LOGIN_URL = os.getenv('PORTAL_LOGIN_URL')
     GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+    SESSION_TTL_SECONDS = int(os.getenv('SESSION_TTL_SECONDS', 60 * 60 * 12))  # default 12 hours
+    SESSION_MAX_IDLE_SECONDS = int(os.getenv('SESSION_MAX_IDLE_SECONDS', 60 * 60 * 2))  # 2 hours idle timeout
+    SESSION_ROTATE_SECONDS = int(os.getenv('SESSION_ROTATE_SECONDS', 60 * 60 * 6))  # reissue token every 6h
+    SESSION_TOKEN_BYTES = int(os.getenv('SESSION_TOKEN_BYTES', 48))
+    TWO_FACTOR_CODE_LENGTH = int(os.getenv('TWO_FACTOR_CODE_LENGTH', 6))
+    TWO_FACTOR_TTL_SECONDS = int(os.getenv('TWO_FACTOR_TTL_SECONDS', 10 * 60))
+    TWO_FACTOR_MAX_ATTEMPTS = int(os.getenv('TWO_FACTOR_MAX_ATTEMPTS', 5))

@@ -1,25 +1,23 @@
 """
-Lightweight in-memory two-factor challenge store.
+Persistent two-factor challenge store backed by the database.
 
-This module manages short-lived verification codes that are issued to
-users who are required to complete an additional authentication step.
-Codes are generated as 6-digit strings, hashed before persisting in the
-process-local store, and expire automatically after a configurable TTL.
+Replaces the prior in-memory implementation so that challenges survive
+application restarts and can operate in multi-worker deployments.
 """
-
-from __future__ import annotations
 
 import hashlib
 import secrets
 import string
-import time
-from dataclasses import dataclass
-from threading import Lock
-from typing import Dict, Iterable, Tuple
+from datetime import timedelta
+from typing import Tuple
+
+from flask import current_app
+
+from app.models import TwoFactorChallengeModel, db, now_kuala_lumpur
 
 DEFAULT_CODE_LENGTH = 6
-CHALLENGE_TTL_SECONDS = 10 * 60  # 10 minutes
-MAX_ATTEMPTS = 5
+DEFAULT_TTL_SECONDS = 10 * 60  # 10 minutes
+DEFAULT_MAX_ATTEMPTS = 5
 
 
 class TwoFactorError(Exception):
@@ -38,22 +36,6 @@ class TwoFactorTooManyAttemptsError(TwoFactorError):
     """Raised when the user exceeded the maximum number of attempts."""
 
 
-@dataclass
-class TwoFactorChallenge:
-    user_id: int
-    code_hash: str
-    expires_at: float
-    attempts: int = 0
-
-    def is_expired(self, now: float | None = None) -> bool:
-        current = time.time() if now is None else now
-        return current >= self.expires_at
-
-
-_LOCK = Lock()
-_CHALLENGES: Dict[str, TwoFactorChallenge] = {}
-
-
 def _hash_code(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
@@ -62,66 +44,83 @@ def _generate_code(length: int = DEFAULT_CODE_LENGTH) -> str:
     return "".join(secrets.choice(string.digits) for _ in range(max(1, length)))
 
 
-def cleanup_expired_challenges(now: float | None = None) -> None:
-    """Remove all expired challenges from the in-memory store."""
-    current = time.time() if now is None else now
-    with _LOCK:
-        expired: Iterable[str] = [
-            challenge_id
-            for challenge_id, challenge in _CHALLENGES.items()
-            if challenge.expires_at <= current
-        ]
-        for challenge_id in expired:
-            _CHALLENGES.pop(challenge_id, None)
+def _config_seconds(name: str, default: int) -> int:
+    value = current_app.config.get(name, default)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def cleanup_expired_challenges() -> None:
+    """Remove expired challenges from the persistent store."""
+    now = now_kuala_lumpur()
+    expired = TwoFactorChallengeModel.query.filter(TwoFactorChallengeModel.expires_at <= now).all()
+    if not expired:
+        return
+    for challenge in expired:
+        db.session.delete(challenge)
+    db.session.commit()
 
 
 def invalidate_two_factor_challenge(challenge_id: str) -> None:
-    with _LOCK:
-        _CHALLENGES.pop(challenge_id, None)
+    if not challenge_id:
+        return
+    challenge = TwoFactorChallengeModel.query.filter_by(challenge_id=challenge_id).first()
+    if challenge:
+        db.session.delete(challenge)
+        db.session.commit()
 
 
 def invalidate_user_challenges(user_id: int) -> None:
-    with _LOCK:
-        stale = [cid for cid, challenge in _CHALLENGES.items() if challenge.user_id == user_id]
-        for cid in stale:
-            _CHALLENGES.pop(cid, None)
+    if not user_id:
+        return
+    challenges = TwoFactorChallengeModel.query.filter_by(user_id=user_id).all()
+    if not challenges:
+        return
+    for challenge in challenges:
+        db.session.delete(challenge)
+    db.session.commit()
 
 
 def create_two_factor_challenge(
     user_id: int,
     *,
-    ttl_seconds: int = CHALLENGE_TTL_SECONDS,
-    code_length: int = DEFAULT_CODE_LENGTH,
+    ttl_seconds: int | None = None,
+    code_length: int | None = None,
 ) -> Tuple[str, str]:
     """
-    Create a new two-factor challenge for the given user.
+    Create and persist a new challenge for the user.
 
-    Returns a tuple of (challenge_id, plain_code).  The caller is
-    responsible for delivering the code to the user (e.g. via email or SMS).
+    Returns (challenge_id, verification_code).
     """
     cleanup_expired_challenges()
     invalidate_user_challenges(user_id)
 
+    ttl = ttl_seconds or _config_seconds("TWO_FACTOR_TTL_SECONDS", DEFAULT_TTL_SECONDS)
+    length = code_length or _config_seconds("TWO_FACTOR_CODE_LENGTH", DEFAULT_CODE_LENGTH)
+
     challenge_id = secrets.token_urlsafe(32)
-    code = _generate_code(code_length)
+    code = _generate_code(length)
     code_hash = _hash_code(code)
-    expires_at = time.time() + max(30, ttl_seconds)  # minimum validity of 30 seconds
+    expires_at = now_kuala_lumpur() + timedelta(seconds=max(30, ttl))
 
-    with _LOCK:
-        _CHALLENGES[challenge_id] = TwoFactorChallenge(
-            user_id=user_id,
-            code_hash=code_hash,
-            expires_at=expires_at,
-            attempts=0,
-        )
-
+    challenge = TwoFactorChallengeModel(
+        challenge_id=challenge_id,
+        user_id=user_id,
+        code_hash=code_hash,
+        expires_at=expires_at,
+        attempts=0,
+    )
+    db.session.add(challenge)
+    db.session.commit()
     return challenge_id, code
 
 
 def verify_two_factor_code(challenge_id: str, submitted_code: str) -> int:
     """
-    Verify the submitted code. Returns the associated user_id on success.
-    Raises a relevant TwoFactorError subclass on failure.
+    Validate the submitted code and return the associated user id.
+    Raises a TwoFactorError subclass on failure.
     """
     if not challenge_id:
         raise TwoFactorInvalidError("Missing challenge identifier.")
@@ -129,34 +128,34 @@ def verify_two_factor_code(challenge_id: str, submitted_code: str) -> int:
         raise TwoFactorInvalidError("Missing verification code.")
 
     cleanup_expired_challenges()
+    challenge = TwoFactorChallengeModel.query.filter_by(challenge_id=challenge_id).first()
+    if not challenge:
+        raise TwoFactorInvalidError("Verification challenge not found.")
 
-    with _LOCK:
-        challenge = _CHALLENGES.get(challenge_id)
-        if not challenge:
-            raise TwoFactorInvalidError("Verification challenge not found.")
+    now = now_kuala_lumpur()
+    if challenge.expires_at <= now:
+        db.session.delete(challenge)
+        db.session.commit()
+        raise TwoFactorExpiredError("Verification code has expired. Please request a new one.")
 
-        now = time.time()
-        if challenge.is_expired(now):
-            _CHALLENGES.pop(challenge_id, None)
-            raise TwoFactorExpiredError("Verification code has expired. Please request a new one.")
+    max_attempts = _config_seconds("TWO_FACTOR_MAX_ATTEMPTS", DEFAULT_MAX_ATTEMPTS)
+    if challenge.attempts >= max_attempts:
+        db.session.delete(challenge)
+        db.session.commit()
+        raise TwoFactorTooManyAttemptsError("Too many incorrect attempts. Please request a new code.")
 
-        if challenge.attempts >= MAX_ATTEMPTS:
-            _CHALLENGES.pop(challenge_id, None)
+    submitted_hash = _hash_code(submitted_code.strip())
+    if challenge.code_hash != submitted_hash:
+        challenge.attempts += 1
+        db.session.add(challenge)
+        db.session.commit()
+        if challenge.attempts >= max_attempts:
+            db.session.delete(challenge)
+            db.session.commit()
             raise TwoFactorTooManyAttemptsError("Too many incorrect attempts. Please request a new code.")
+        raise TwoFactorInvalidError("Incorrect verification code.")
 
-        expected_hash = challenge.code_hash
-        submitted_hash = _hash_code(submitted_code.strip())
-
-        if expected_hash != submitted_hash:
-            challenge.attempts += 1
-            if challenge.attempts >= MAX_ATTEMPTS:
-                _CHALLENGES.pop(challenge_id, None)
-                raise TwoFactorTooManyAttemptsError("Too many incorrect attempts. Please request a new code.")
-            _CHALLENGES[challenge_id] = challenge
-            raise TwoFactorInvalidError("Incorrect verification code.")
-
-        user_id = challenge.user_id
-        _CHALLENGES.pop(challenge_id, None)
-
+    user_id = challenge.user_id
+    db.session.delete(challenge)
+    db.session.commit()
     return user_id
-

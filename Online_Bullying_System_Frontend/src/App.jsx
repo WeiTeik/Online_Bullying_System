@@ -14,10 +14,13 @@ import {
   addComplaintComment,
   loginWithGoogle,
   verifyTwoFactor,
+  logout as logoutRequest,
+  setAuthToken,
 } from './services/api';
 import './App.css';
 
 const LOCAL_STORAGE_USER_KEY = 'obs.currentUser';
+const LOCAL_STORAGE_SESSION_KEY = 'obs.session';
 
 const ADMIN_ROLES = new Set(['ADMIN', 'SUPER ADMIN']);
 
@@ -47,6 +50,23 @@ const loadStoredUser = () => {
   }
 };
 
+const loadStoredSession = () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const raw = window.localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn('Detected invalid stored session data, clearing persisted session.', error);
+    window.localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
+    return null;
+  }
+};
+
 function App() {
   const [complaints, setComplaints] = useState([])
   const [isComplaintsLoading, setIsComplaintsLoading] = useState(false)
@@ -55,6 +75,7 @@ function App() {
   const [authError, setAuthError] = useState(null)
   const [isAuthLoading, setIsAuthLoading] = useState(false)
   const [currentUser, setCurrentUser] = useState(() => loadStoredUser())
+  const [sessionInfo, setSessionInfo] = useState(() => loadStoredSession())
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [pendingRoute, setPendingRoute] = useState(null)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
@@ -64,6 +85,11 @@ function App() {
   const [isTwoFactorLoading, setIsTwoFactorLoading] = useState(false)
   const [twoFactorError, setTwoFactorError] = useState(null)
   const [twoFactorMessage, setTwoFactorMessage] = useState(null)
+  useEffect(() => {
+    if (currentUser && !sessionInfo) {
+      setCurrentUser(null)
+    }
+  }, [currentUser, sessionInfo])
 
   // Add this inside App to get the current route
   const location = useLocation();
@@ -92,10 +118,25 @@ function App() {
     }
   }, [currentUser]);
 
-  const completeLogin = useCallback((user) => {
-    if (!user) {
-      return
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
     }
+    if (sessionInfo?.token) {
+      window.localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify(sessionInfo));
+      setAuthToken(sessionInfo.token);
+    } else {
+      window.localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
+      setAuthToken(null);
+    }
+  }, [sessionInfo]);
+
+  const completeLogin = useCallback((payload) => {
+    if (!payload || !payload.user || !payload.session || !payload.session.token) {
+      throw new Error('Invalid login response received.');
+    }
+    const { user, session } = payload
+    setSessionInfo(session)
     setCurrentUser(user)
     setShowLogin(false)
     setShowUserMenu(false)
@@ -104,6 +145,7 @@ function App() {
     setTwoFactorMessage(null)
     setIsTwoFactorLoading(false)
     setIsAuthLoading(false)
+    setAuthError(null)
     const landingPath = getRoleLandingPath(user)
     const nextRoute =
       isAdminUser(user)
@@ -238,19 +280,8 @@ function App() {
     setAuthError(null)
     handleCancelTwoFactor()
     try {
-      const user = await loginWithGoogle(idToken)
-      setCurrentUser(user)
-      setShowLogin(false)
-      setShowUserMenu(false)
-      const landingPath = getRoleLandingPath(user)
-      const nextRoute =
-        isAdminUser(user)
-          ? landingPath
-          : pendingRoute && !pendingRoute.startsWith('/admin')
-            ? pendingRoute
-            : landingPath
-      navigate(nextRoute)
-      setPendingRoute(null)
+      const payload = await loginWithGoogle(idToken)
+      completeLogin(payload)
     } catch (err) {
       const message =
         err?.response?.data?.error ||
@@ -278,16 +309,24 @@ function App() {
     handleCancelTwoFactor()
   }
 
-  const handleLogout = () => {
-    setCurrentUser(null)
-    setShowUserMenu(false)
-    setPendingRoute(null)
-    setComplaints([])
-    setComplaintsError(null)
-    setIsComplaintsLoading(false)
-    setIsMobileNavOpen(false)
-    handleCancelTwoFactor()
-    navigate('/home')
+  const handleLogout = async () => {
+    try {
+      await logoutRequest()
+    } catch (error) {
+      console.warn('Logout request failed', error)
+    } finally {
+      setSessionInfo(null)
+      setCurrentUser(null)
+      setShowUserMenu(false)
+      setPendingRoute(null)
+      setComplaints([])
+      setComplaintsError(null)
+      setIsComplaintsLoading(false)
+      setIsMobileNavOpen(false)
+      handleCancelTwoFactor()
+      setAuthError(null)
+      navigate('/home')
+    }
   }
 
   const handleViewProfile = () => {
@@ -300,10 +339,7 @@ function App() {
     if (!currentUser) {
       throw new Error('You must be logged in to comment.')
     }
-    const comment = await addComplaintComment(complaintId, {
-      author_id: currentUser.id,
-      message,
-    })
+    const comment = await addComplaintComment(complaintId, { message })
     setComplaints(prev =>
       prev.map(complaint =>
         complaint.id === complaintId

@@ -47,12 +47,12 @@ from app.utils.two_factor import (
     verify_two_factor_code,
     cleanup_expired_challenges,
     invalidate_two_factor_challenge,
-    CHALLENGE_TTL_SECONDS,
     TwoFactorError,
     TwoFactorExpiredError,
     TwoFactorInvalidError,
     TwoFactorTooManyAttemptsError,
 )
+from app.auth import issue_session, require_session, revoke_session, get_current_user
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 
@@ -89,6 +89,13 @@ _COMPLAINT_RATE_LIMIT_LOCK = Lock()
 _COMPLAINT_DUPLICATE_WINDOW_SECONDS = 60 * 30  # 30 minutes
 _COMPLAINT_FINGERPRINTS: dict[str, float] = {}
 _COMPLAINT_FINGERPRINT_LOCK = Lock()
+
+_LOGIN_ATTEMPT_WINDOW_SECONDS = 60 * 5  # 5 minutes
+_LOGIN_ATTEMPT_MAX_ATTEMPTS = 5
+_LOGIN_LOCK_DURATION_SECONDS = 60 * 15  # 15 minutes lockout
+_LOGIN_ATTEMPT_BUCKETS: dict[str, deque[float]] = {}
+_LOGIN_LOCKED_UNTIL: dict[str, float] = {}
+_LOGIN_ATTEMPT_LOCK = Lock()
 
 _SUSPICIOUS_CONTENT_PATTERNS = (
     re.compile(r"<\s*script", re.IGNORECASE),
@@ -213,6 +220,64 @@ def _register_complaint_fingerprint(fingerprint):
     now = time.time()
     with _COMPLAINT_FINGERPRINT_LOCK:
         _COMPLAINT_FINGERPRINTS[fingerprint] = now
+
+
+def _check_login_rate_limit(identifier: str | None) -> tuple[bool, int | None]:
+    now = time.time()
+    keys = {f"ip:{_extract_client_identifier()}"}
+    if identifier:
+        keys.add(f"id:{identifier.strip().lower()}")
+    with _LOGIN_ATTEMPT_LOCK:
+        for key in keys:
+            locked_until = _LOGIN_LOCKED_UNTIL.get(key)
+            if locked_until and now < locked_until:
+                return False, int(max(1, locked_until - now))
+
+        for key in keys:
+            bucket = _LOGIN_ATTEMPT_BUCKETS.setdefault(key, deque())
+            while bucket and now - bucket[0] > _LOGIN_ATTEMPT_WINDOW_SECONDS:
+                bucket.popleft()
+            if len(bucket) >= _LOGIN_ATTEMPT_MAX_ATTEMPTS:
+                lock_until = now + _LOGIN_LOCK_DURATION_SECONDS
+                for lock_key in keys:
+                    existing = _LOGIN_LOCKED_UNTIL.get(lock_key, 0)
+                    _LOGIN_LOCKED_UNTIL[lock_key] = max(existing, lock_until)
+                return False, int(_LOGIN_LOCK_DURATION_SECONDS)
+
+        for key in keys:
+            bucket = _LOGIN_ATTEMPT_BUCKETS.setdefault(key, deque())
+            bucket.append(now)
+    return True, None
+
+
+def _reset_login_rate_limit(identifier: str | None) -> None:
+    keys = {f"ip:{_extract_client_identifier()}"}
+    if identifier:
+        keys.add(f"id:{identifier.strip().lower()}")
+    with _LOGIN_ATTEMPT_LOCK:
+        for key in keys:
+            _LOGIN_ATTEMPT_BUCKETS.pop(key, None)
+            _LOGIN_LOCKED_UNTIL.pop(key, None)
+
+
+def _requires_two_factor(user: User) -> bool:
+    if not user:
+        return True
+    role_value = str(getattr(user.role, "value", user.role) or "").replace("_", " ").strip().upper()
+    if role_value in {"ADMIN", "SUPER ADMIN"}:
+        return True
+    if user.last_login_at is None:
+        return True
+    if user.two_factor_verified_at is None:
+        return True
+    return False
+
+
+def _is_admin(user: User | None) -> bool:
+    if not user:
+        return False
+    role_value = str(getattr(user.role, "value", user.role) or "").replace("_", " ").strip().upper()
+    return role_value in {"ADMIN", "SUPER ADMIN"}
 
 
 def _detect_suspicious_complaint_content(payload):
@@ -461,30 +526,50 @@ def _send_two_factor_code_email(user: User, verification_code: str) -> None:
     send_email("Your YouMatter verification code", email, text_body, html_body=html_body)
 
 
-def _finalize_successful_login(user: User):
+def _complete_login_success(user: User, *, mark_two_factor_verified: bool = False):
     updated = False
     if (user.status or "").lower() == UserStatus.PENDING.value:
         user.status = UserStatus.ACTIVE.value
         updated = True
-    user.last_login_at = now_kuala_lumpur()
+    now = now_kuala_lumpur()
+    user.last_login_at = now
     updated = True
+    if mark_two_factor_verified:
+        user.two_factor_verified_at = now
+        updated = True
     if updated:
         db.session.commit()
-    return user.to_dict()
+    session_payload = issue_session(
+        user,
+        ip_address=_extract_client_identifier(),
+        user_agent=request.headers.get("User-Agent"),
+    )
+    return {
+        "user": user.to_dict(),
+        "session": session_payload,
+    }
 
 @api_bp.route("/users", methods=["GET"])
+@require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_get_users():
     users = get_all_users()
     return jsonify(users), 200
 
 @api_bp.route("/users/<int:user_id>", methods=["GET"])
+@require_session()
 def api_get_user(user_id):
     user = get_user_by_id(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"error": "Unauthorized"}), 401
+    if current_user.id != user_id and not _is_admin(current_user):
+        return jsonify({"error": "Forbidden"}), 403
     return jsonify(user), 200
 
 @api_bp.route("/users", methods=["POST"])
+@require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_create_user():
     data = request.get_json() or {}
     result = create_user(data)
@@ -494,8 +579,14 @@ def api_create_user():
     return jsonify(result), 201
 
 @api_bp.route("/users/<int:user_id>", methods=["PUT"])
+@require_session()
 def api_update_user(user_id):
     data = request.get_json() or {}
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"error": "Unauthorized"}), 401
+    if current_user.id != user_id and not _is_admin(current_user):
+        return jsonify({"error": "Forbidden"}), 403
     result = update_user(user_id, data)
     if result is None:
         return jsonify({"error": "User not found"}), 404
@@ -504,6 +595,7 @@ def api_update_user(user_id):
     return jsonify(result), 200
 
 @api_bp.route("/users/<int:user_id>", methods=["DELETE"])
+@require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_delete_user(user_id):
     ok = delete_user(user_id)
     if not ok:
@@ -512,6 +604,7 @@ def api_delete_user(user_id):
 
 
 @api_bp.route("/admin/students", methods=["GET"])
+@require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_list_students():
     try:
         students = list_students()
@@ -521,6 +614,7 @@ def api_list_students():
 
 
 @api_bp.route("/admin/students", methods=["POST"])
+@require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_invite_student():
     data = request.get_json() or {}
     full_name = data.get("full_name") or data.get("name")
@@ -538,6 +632,7 @@ def api_invite_student():
 
 
 @api_bp.route("/admin/students/<int:student_id>", methods=["PATCH"])
+@require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_update_student(student_id):
     data = request.get_json() or {}
     full_name = data.get("full_name") or data.get("name")
@@ -554,6 +649,7 @@ def api_update_student(student_id):
 
 
 @api_bp.route("/admin/students/<int:student_id>/reset_password", methods=["POST"])
+@require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_reset_student_password(student_id):
     try:
         student, temporary_password = reset_student_password(student_id)
@@ -567,6 +663,7 @@ def api_reset_student_password(student_id):
 
 
 @api_bp.route("/admin/students/<int:student_id>", methods=["DELETE"])
+@require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_remove_student(student_id):
     try:
         remove_student(student_id)
@@ -578,6 +675,7 @@ def api_remove_student(student_id):
 
 
 @api_bp.route("/admin/admins", methods=["POST"])
+@require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_invite_admin():
     data = request.get_json() or {}
     full_name = data.get("full_name") or data.get("name")
@@ -596,13 +694,20 @@ def api_invite_admin():
 
 
 @api_bp.route("/complaints", methods=["GET"])
+@require_session()
 def api_get_complaints():
     user_id = request.args.get("user_id", type=int)
     include_comments = request.args.get("include_comments", "false").lower() == "true"
-    if user_id:
-        complaints = get_complaints_for_user(user_id, include_comments=include_comments)
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"error": "Unauthorized"}), 401
+    if _is_admin(current_user):
+        if user_id:
+            complaints = get_complaints_for_user(user_id, include_comments=include_comments)
+        else:
+            complaints = get_all_complaints(include_comments=include_comments)
     else:
-        complaints = get_all_complaints(include_comments=include_comments)
+        complaints = get_complaints_for_user(current_user.id, include_comments=include_comments)
     return jsonify(complaints), 200
 
 
@@ -663,23 +768,40 @@ def api_create_complaint():
 
 
 @api_bp.route("/complaints/<int:complaint_id>/comments", methods=["GET"])
+@require_session()
 def api_get_complaint_comments(complaint_id):
     complaint = get_complaint_by_id(complaint_id)
     if not complaint:
         return jsonify({"error": "Complaint not found"}), 404
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"error": "Unauthorized"}), 401
+    if not _is_admin(current_user):
+        if complaint.user_id is None or complaint.user_id != current_user.id:
+            return jsonify({"error": "Forbidden"}), 403
     comments = get_comments(complaint_id)
     return jsonify(comments), 200
 
 
 @api_bp.route("/complaints/<int:complaint_id>/comments", methods=["POST"])
+@require_session()
 def api_add_comment(complaint_id):
     data = request.get_json() or {}
     message = (data.get("message") or "").strip()
     if not message:
         return jsonify({"error": "Comment message is required."}), 400
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"error": "Unauthorized"}), 401
+    complaint = get_complaint_by_id(complaint_id)
+    if not complaint:
+        return jsonify({"error": "Complaint not found"}), 404
+    if not _is_admin(current_user):
+        if complaint.user_id is None or complaint.user_id != current_user.id:
+            return jsonify({"error": "Forbidden"}), 403
     comment = add_comment(
         complaint_id=complaint_id,
-        author_id=data.get("author_id"),
+        author_id=current_user.id,
         message=message,
     )
     if comment is None:
@@ -688,6 +810,7 @@ def api_add_comment(complaint_id):
 
 
 @api_bp.route("/complaints/<int:complaint_id>/status", methods=["PATCH"])
+@require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_update_complaint_status(complaint_id):
     data = request.get_json() or {}
     status_value = data.get("status")
@@ -703,10 +826,16 @@ def api_update_complaint_status(complaint_id):
 
 
 @api_bp.route("/users/<int:user_id>/password", methods=["POST"])
+@require_session()
 def api_change_password(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"error": "Unauthorized"}), 401
+    if current_user.id != user_id and not _is_admin(current_user):
+        return jsonify({"error": "Forbidden"}), 403
 
     data = request.get_json() or {}
     old_password = data.get("old_password")
@@ -726,6 +855,7 @@ def api_change_password(user_id):
         return jsonify({"error": "New password must be different from the old password."}), 400
 
     user.set_password(new_password)
+    user.two_factor_verified_at = None
     db.session.commit()
     return jsonify({"success": True, "message": "Password updated successfully."}), 200
 
@@ -767,13 +897,21 @@ def api_forgot_password():
 @api_bp.route("/auth/login", methods=["POST"])
 def api_login():
     data = request.get_json() or {}
-    identifier = data.get("email") or data.get("username")
+    identifier = (data.get("email") or data.get("username") or "").strip()
     password = data.get("password")
     if not identifier or not password:
         # also print to stdout so you see it in the terminal
         print(f"Login attempt with missing credentials from {request.remote_addr}")
         current_app.logger.warning("Login attempt with missing credentials from %s", request.remote_addr)
         return jsonify({"error": "Missing credentials"}), 400
+
+    allowed, retry_after = _check_login_rate_limit(identifier)
+    if not allowed:
+        message = "Too many login attempts. Please try again later."
+        response = {"error": message}
+        if retry_after:
+            response["retry_after_seconds"] = retry_after
+        return jsonify(response), 429
 
     # try by email then username
     user = User.query.filter((User.email == identifier) | (User.username == identifier)).first()
@@ -788,7 +926,8 @@ def api_login():
         return jsonify({"error": "Invalid credentials"}), 401
 
     cleanup_expired_challenges()
-    requires_two_factor = user.last_login_at is None
+    requires_two_factor = _requires_two_factor(user)
+    must_reset_password = user.last_login_at is None
 
     if requires_two_factor:
         try:
@@ -811,14 +950,15 @@ def api_login():
             user.username,
             request.remote_addr,
         )
+        _reset_login_rate_limit(identifier)
         return (
             jsonify(
                 {
                     "requires_two_factor": True,
                     "challenge_id": challenge_id,
                     "email": masked_email,
-                    "expires_in": CHALLENGE_TTL_SECONDS,
-                    "requires_password_reset": True,
+                    "expires_in": current_app.config.get("TWO_FACTOR_TTL_SECONDS", 10 * 60),
+                    "requires_password_reset": bool(must_reset_password),
                     "message": "A verification code has been sent to your email address.",
                 }
             ),
@@ -830,8 +970,9 @@ def api_login():
     current_app.logger.info(
         "Login successful: user id=%s username=%s from %s", user.id, user.username, request.remote_addr
     )
-    user_dict = _finalize_successful_login(user)
-    return jsonify(user_dict), 200
+    _reset_login_rate_limit(identifier)
+    login_payload = _complete_login_success(user, mark_two_factor_verified=False)
+    return jsonify(login_payload), 200
 
 
 @api_bp.route("/auth/google", methods=["POST"])
@@ -900,9 +1041,8 @@ def api_google_login():
         if updated:
             current_app.logger.info("Updated Google profile details for user id=%s", user.id)
 
-    user.last_login_at = now_kuala_lumpur()
-    db.session.commit()
-    return jsonify(user.to_dict()), 200
+    payload = _complete_login_success(user, mark_two_factor_verified=True)
+    return jsonify(payload), 200
 
 
 @api_bp.route("/auth/verify-2fa", methods=["POST"])
@@ -954,7 +1094,8 @@ def api_verify_two_factor():
             request.remote_addr,
         )
 
-        user_dict = _finalize_successful_login(user)
+        _reset_login_rate_limit(user.email or user.username)
+        user_dict = _complete_login_success(user, mark_two_factor_verified=True)
         _consume_password_reset_token(reset_token)
         return jsonify(user_dict), 200
 
@@ -997,6 +1138,7 @@ def api_verify_two_factor():
         current_app.logger.info(
             "Two-factor code verified for user id=%s; awaiting password reset to complete login.", user.id
         )
+        _reset_login_rate_limit(user.email or user.username)
         return (
             jsonify(
                 {
@@ -1017,8 +1159,21 @@ def api_verify_two_factor():
         user.username,
         request.remote_addr,
     )
-    user_dict = _finalize_successful_login(user)
+    _reset_login_rate_limit(user.email or user.username)
+    user_dict = _complete_login_success(user, mark_two_factor_verified=True)
     return jsonify(user_dict), 200
+
+
+@api_bp.route("/auth/logout", methods=["POST"])
+@require_session()
+def api_logout():
+    auth_header = request.headers.get("Authorization", "")
+    token = ""
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+    if token:
+        revoke_session(token)
+    return jsonify({"success": True}), 200
 
 
 def _detect_extension_from_header(header: str) -> str:
@@ -1033,10 +1188,16 @@ def _detect_extension_from_header(header: str) -> str:
 
 
 @api_bp.route("/users/<int:user_id>/avatar", methods=["POST"])
+@require_session()
 def api_upload_avatar(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"error": "Unauthorized"}), 401
+    if current_user.id != user_id and not _is_admin(current_user):
+        return jsonify({"error": "Forbidden"}), 403
 
     data = request.get_json() or {}
     image_data = data.get("image")
@@ -1084,10 +1245,16 @@ def api_upload_avatar(user_id):
 
 
 @api_bp.route("/users/<int:user_id>/avatar", methods=["DELETE"])
+@require_session()
 def api_delete_avatar(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"error": "Unauthorized"}), 401
+    if current_user.id != user_id and not _is_admin(current_user):
+        return jsonify({"error": "Forbidden"}), 403
 
     upload_root = current_app.config.get("UPLOAD_FOLDER")
     avatar_subdir = current_app.config.get("AVATAR_SUBDIR", "avatars")

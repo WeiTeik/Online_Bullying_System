@@ -31,6 +31,7 @@ class User(db.Model):
     status = db.Column(db.String(32), nullable=False, default=UserStatus.ACTIVE.value)
     invited_at = db.Column(db.DateTime(timezone=True), nullable=True)
     last_login_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    two_factor_verified_at = db.Column(db.DateTime(timezone=True), nullable=True)
     complaints = db.relationship(
         "Complaint",
         backref="user",
@@ -160,3 +161,31 @@ class ComplaintComment(db.Model):
             "message": self.message,
             "created_at": self.created_at.isoformat() if isinstance(self.created_at, (datetime, date)) else self.created_at,
         }
+
+
+class LoginSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    token_hash = db.Column(db.String(128), nullable=False, unique=True)
+    issued_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_kuala_lumpur)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    last_seen_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    revoked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    ip_address = db.Column(db.String(64), nullable=True)
+    user_agent = db.Column(db.String(256), nullable=True)
+
+    user = db.relationship("User", backref=db.backref("sessions", lazy="dynamic"))
+
+
+class TwoFactorChallengeModel(db.Model):
+    __tablename__ = "two_factor_challenges"
+
+    id = db.Column(db.Integer, primary_key=True)
+    challenge_id = db.Column(db.String(128), nullable=False, unique=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    code_hash = db.Column(db.String(128), nullable=False)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_kuala_lumpur)
+
+    user = db.relationship("User", backref=db.backref("two_factor_challenges", lazy="dynamic"))
