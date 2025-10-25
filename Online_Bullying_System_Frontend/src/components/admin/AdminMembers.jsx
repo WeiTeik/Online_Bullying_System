@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './admin.css';
 import {
   getUsers,
@@ -76,7 +76,13 @@ const AdminMembers = ({ currentUser }) => {
   const currentRole = roleKey(currentUser?.role);
   const isSuperAdmin = currentRole === 'SUPER_ADMIN';
 
+  const hasFetchedRef = useRef(false);
+
   useEffect(() => {
+    if (hasFetchedRef.current) {
+      return;
+    }
+    hasFetchedRef.current = true;
     let isActive = true;
     const fetchAdmins = async () => {
       setIsLoading(true);
