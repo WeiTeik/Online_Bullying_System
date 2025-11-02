@@ -20,7 +20,7 @@ def send_email(
 ) -> None:
     """
     Send an email using SMTP settings defined in the Flask config.
-    Expects the following configuration keys:
+    Expects the following configuration keys:k
       MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD,
       MAIL_USE_TLS, MAIL_USE_SSL, MAIL_DEFAULT_SENDER, MAIL_TIMEOUT
     """

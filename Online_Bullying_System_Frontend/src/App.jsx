@@ -70,10 +70,24 @@ function App() {
   const navigate = useNavigate();
   const userMenuRef = useRef(null);
 
-  const handleUserUpdate = (updatedUser) => {
-    if (!updatedUser) return
-    setCurrentUser(updatedUser)
-  }
+  const handleUserUpdate = useCallback((updatedUser) => {
+    if (!updatedUser) {
+      return
+    }
+    setCurrentUser((prevUser) => {
+      if (!prevUser) {
+        return updatedUser
+      }
+      const mergedUser = {
+        ...prevUser,
+        ...updatedUser,
+      }
+      const hasChanged = Object.keys(mergedUser).some(
+        (key) => prevUser[key] !== mergedUser[key],
+      )
+      return hasChanged ? mergedUser : prevUser
+    })
+  }, [])
 
   const handleSubmitComplaint = (complaint) => {
     if (!complaint) return
@@ -428,8 +442,8 @@ function App() {
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isLoginRoute = location.pathname === '/login';
 
-  const rawFullName = (currentUser?.full_name || '').trim()
-  const rawUsername = (currentUser?.username || '').trim()
+  const rawFullName = (currentUser?.full_name || currentUser?.fullName || '').trim()
+  const rawUsername = (currentUser?.username || currentUser?.user_name || '').trim()
   const rawEmail = (currentUser?.email || '').trim()
   const displayName = rawFullName || rawUsername || rawEmail || 'User'
   const avatarInitialSource = rawFullName || rawUsername || rawEmail || 'U'

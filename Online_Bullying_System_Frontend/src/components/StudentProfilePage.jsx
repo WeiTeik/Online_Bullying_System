@@ -94,6 +94,9 @@ function StudentProfilePage({
         const data = await getUser(currentUser.id);
         if (isMounted) {
           setUser(data);
+          if (onUserUpdate) {
+            onUserUpdate({ ...currentUser, ...data });
+          }
         }
       } catch (err) {
         if (isMounted) {
@@ -112,7 +115,7 @@ function StudentProfilePage({
     return () => {
       isMounted = false;
     };
-  }, [currentUser, navigate]);
+  }, [currentUser?.id, navigate, onUserUpdate]);
 
   useEffect(() => {
     if (!allowNameEdit) {
