@@ -605,7 +605,9 @@ function LoginModal({
         <div className="login-modal-content">
           <h2>
             {isTwoFactorActive
-              ? 'Verify your identity'
+              ? isAwaitingPasswordReset
+                ? 'Reset Password'
+                : 'Verify your identity'
               : isForgotPasswordActive
                 ? 'Forgot your password'
                 : 'Login'}
@@ -784,7 +786,9 @@ function LoginPage({
       <div className="login-page-content">
         <h2>
           {isTwoFactorActive
-            ? 'Verify your identity'
+            ? isAwaitingPasswordReset
+              ? 'Reset Password'
+              : 'Verify your identity'
             : isForgotPasswordActive
               ? 'Forgot your password'
               : 'Login'}
