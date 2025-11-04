@@ -26,6 +26,15 @@ const formatDateTime = (value) => {
   });
 };
 
+const formatStatusLabel = (status = '') => {
+  const raw = (status || '').toString().trim();
+  if (!raw) return 'Pending';
+  const normalized = raw.toLowerCase().replace(/\s+/g, '_');
+  if (normalized === 'new' || normalized === 'pending') return 'Pending';
+  if (normalized === 'in_progress' || normalized === 'investigating') return 'Investigating';
+  return raw.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
 function StudentProfilePage({
   complaints = [],
   showHistory = true,
@@ -722,10 +731,12 @@ function StudentProfilePage({
                 <ul className="history-list">
                   {complaints.map((c) => {
                     const submittedAt = c.submitted_at || c.submittedAt;
+                    const statusValue = c.status || c.status_label || c.statusLabel;
+                    const statusLabel = formatStatusLabel(statusValue);
                     return (
                       <li key={c.id} className="history-item">
                         <div className="history-content">
-                          <div className="history-field"><strong>Status:</strong> {c.status}</div>
+                          <div className="history-field"><strong>Status:</strong> {statusLabel}</div>
                           <div className="history-field"><strong>Date:</strong> {formatDateTime(submittedAt)}</div>
                           <div className="history-field history-description"><strong>Description:</strong> {c.description}</div>
                         </div>

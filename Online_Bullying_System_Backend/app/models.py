@@ -152,12 +152,26 @@ class ComplaintComment(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_kuala_lumpur)
 
     def to_dict(self):
+        author = getattr(self, "author", None)
+        display_name = (self.author_name or "").strip()
+        role_value = self.author_role or "SYSTEM"
+        if author:
+            derived_name = (author.full_name or author.username or author.email or "").strip()
+            if derived_name:
+                display_name = derived_name
+            author_role = author.role.value if hasattr(author.role, "value") else author.role
+            if author_role:
+                role_value = str(author_role).upper()
+        if not display_name:
+            display_name = "System"
+        if not role_value:
+            role_value = "SYSTEM"
         return {
             "id": self.id,
             "complaint_id": self.complaint_id,
             "author_id": self.author_id,
-            "author_name": self.author_name,
-            "author_role": self.author_role,
+            "author_name": display_name,
+            "author_role": role_value,
             "message": self.message,
             "created_at": self.created_at.isoformat() if isinstance(self.created_at, (datetime, date)) else self.created_at,
         }

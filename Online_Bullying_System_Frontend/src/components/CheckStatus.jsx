@@ -130,6 +130,23 @@ function ComplaintStatus({ complaints = [], loading, error, onAddComment, curren
   const [focusedComplaintId, setFocusedComplaintId] = useState(() => location.state?.complaintId || null);
   const complaintRefs = useRef({});
 
+  const resolveCommentAuthorName = (comment) => {
+    if (!comment) return 'System';
+    if (
+      currentUser &&
+      comment.author_id != null &&
+      Number(comment.author_id) === Number(currentUser.id)
+    ) {
+      const updatedName =
+        (currentUser.full_name || currentUser.username || currentUser.email || '').trim();
+      if (updatedName) {
+        return updatedName;
+      }
+    }
+    const storedName = (comment.author_name || '').trim();
+    return storedName || 'System';
+  };
+
   const handleToggleExpanded = (id) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
@@ -341,7 +358,7 @@ function ComplaintStatus({ complaints = [], loading, error, onAddComment, curren
                           <li key={comment.id} className="comment-item">
                             <div className="comment-meta">
                               <span className="comment-author">
-                                {comment.author_name}
+                                {resolveCommentAuthorName(comment)}
                                 {comment.author_role && (
                                   <span className="comment-role"> ({normaliseStatus(comment.author_role.toLowerCase())})</span>
                                 )}
