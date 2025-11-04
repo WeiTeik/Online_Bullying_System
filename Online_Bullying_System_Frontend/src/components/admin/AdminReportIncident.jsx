@@ -138,6 +138,23 @@ const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
   const [isStatusSaving, setIsStatusSaving] = useState(false);
   const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
 
+  const resolveCommentAuthorName = (comment) => {
+    if (!comment) return 'System';
+    if (
+      currentUser &&
+      comment.author_id != null &&
+      Number(comment.author_id) === Number(currentUser.id)
+    ) {
+      const updatedName =
+        (currentUser.full_name || currentUser.username || currentUser.email || '').trim();
+      if (updatedName) {
+        return updatedName;
+      }
+    }
+    const storedName = (comment.author_name || '').trim();
+    return storedName || 'System';
+  };
+
   useEffect(() => {
     let isMounted = true;
     const fetchIncident = async () => {
@@ -453,7 +470,7 @@ const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
       );
     } else {
       comments.forEach((comment) => {
-        const author = comment.author_name || 'System';
+        const author = resolveCommentAuthorName(comment);
         const timestamp = formatDateTimeLong(comment.created_at);
         const titleText = timestamp ? `${author} • ${timestamp}` : author;
         addCommentCard(titleText, comment.message || '-');
@@ -684,7 +701,7 @@ const AdminReportIncident = ({ currentUser, onRefreshComplaints }) => {
               {comments.map((comment) => (
                 <li key={comment.id} className="incident-comment-item">
                   <div className="incident-comment-meta">
-                    <strong>{comment.author_name || 'System'}</strong>
+                    <strong>{resolveCommentAuthorName(comment)}</strong>
                     <span>{formatDateTimeLong(comment.created_at)}</span>
                   </div>
                   <p>{comment.message}</p>

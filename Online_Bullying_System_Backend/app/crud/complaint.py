@@ -507,8 +507,14 @@ def add_comment(
         return None
 
     user = User.query.get(author_id) if author_id else None
-    author_name = user.username if user else "System"
-    author_role = user.role.value if user else "SYSTEM"
+    if user:
+        raw_name = (user.full_name or user.username or user.email or "").strip()
+        author_name = raw_name or "System"
+        role_value = user.role.value if hasattr(user.role, "value") else (user.role or "SYSTEM")
+        author_role = str(role_value or "SYSTEM").upper()
+    else:
+        author_name = "System"
+        author_role = "SYSTEM"
 
     comment = ComplaintComment(
         complaint_id=complaint.id,
