@@ -128,15 +128,17 @@ function StudentProfilePage({
 
   useEffect(() => {
     if (!allowNameEdit) {
+      setNameValue('');
+      setNameError(null);
+      setNameMessage(null);
       return;
     }
     if (!user) {
       setNameValue('');
+      setNameError(null);
       return;
     }
     setNameValue(user.full_name || '');
-    setNameMessage(null);
-    setNameError(null);
   }, [allowNameEdit, user]);
 
   useEffect(() => {
