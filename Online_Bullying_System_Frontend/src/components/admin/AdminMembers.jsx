@@ -67,10 +67,12 @@ const AdminMembers = ({ currentUser }) => {
   const [editRole, setEditRole] = useState('ADMIN');
   const [editError, setEditError] = useState('');
   const [isEditSaving, setIsEditSaving] = useState(false);
+  const [editResult, setEditResult] = useState(null);
   const [removeModal, setRemoveModal] = useState(null);
   const [removeInput, setRemoveInput] = useState('');
   const [removeError, setRemoveError] = useState('');
   const [isRemoving, setIsRemoving] = useState(false);
+  const [removeResult, setRemoveResult] = useState(null);
   const [failedAvatars, setFailedAvatars] = useState({});
 
   const currentRole = roleKey(currentUser?.role);
@@ -222,6 +224,7 @@ const openEditModal = (admin) => {
   setEditEmail(admin.email || '');
   setEditRole(roleKey(admin.role) === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'ADMIN');
   setEditError('');
+  setEditResult(null);
 };
 
 const closeEditModal = () => {
@@ -263,6 +266,10 @@ const handleSaveEdit = async () => {
         )
       )
     );
+    setEditResult({
+      name: getDisplayName(updated),
+      email: updated.email,
+    });
     closeEditModal();
   } catch (err) {
     const message =
@@ -301,12 +308,17 @@ const handleConfirmRemove = async () => {
   }
   setIsRemoving(true);
   try {
-    await deleteUserApi(removeModal.admin.id);
+    const removedAdmin = removeModal.admin;
+    await deleteUserApi(removedAdmin.id);
     setAdmins((prev) =>
       sortAdmins(
-        prev.filter((admin) => admin.id !== removeModal.admin.id)
+        prev.filter((admin) => admin.id !== removedAdmin.id)
       )
     );
+    setRemoveResult({
+      name: getDisplayName(removedAdmin),
+      email: removedAdmin.email,
+    });
     closeRemoveModal();
   } catch (err) {
     const message =
@@ -520,6 +532,42 @@ const renderAvatar = (admin) => {
               type="button"
               className="admin-feedback-dismiss"
               onClick={() => setAddResult(null)}
+            >
+              &times;
+            </button>
+          </div>
+        )}
+
+        {editResult && (
+          <div className="admin-feedback success" role="status">
+            <strong>Done.</strong> Updated {editResult.name}'s administrator details.
+            {editResult.email && (
+              <div className="admin-feedback-password">
+                Account email: <code>{editResult.email}</code>
+              </div>
+            )}
+            <button
+              type="button"
+              className="admin-feedback-dismiss"
+              onClick={() => setEditResult(null)}
+            >
+              &times;
+            </button>
+          </div>
+        )}
+
+        {removeResult && (
+          <div className="admin-feedback success" role="status">
+            <strong>Done.</strong> Removed {removeResult.name}'s administrator access.
+            {removeResult.email && (
+              <div className="admin-feedback-password">
+                Account email: <code>{removeResult.email}</code>
+              </div>
+            )}
+            <button
+              type="button"
+              className="admin-feedback-dismiss"
+              onClick={() => setRemoveResult(null)}
             >
               &times;
             </button>

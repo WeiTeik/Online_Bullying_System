@@ -40,12 +40,14 @@ const AdminStudents = () => {
   const [editEmail, setEditEmail] = useState('');
   const [editError, setEditError] = useState('');
   const [isEditSaving, setIsEditSaving] = useState(false);
+  const [editResult, setEditResult] = useState(null);
   const [isResetting, setIsResetting] = useState(false);
   const [resetResult, setResetResult] = useState(null);
   const [removeModal, setRemoveModal] = useState(null);
   const [removeInput, setRemoveInput] = useState('');
   const [removeError, setRemoveError] = useState('');
   const [isRemoving, setIsRemoving] = useState(false);
+  const [removeResult, setRemoveResult] = useState(null);
   const [failedAvatars, setFailedAvatars] = useState({});
 
   useEffect(() => {
@@ -163,6 +165,7 @@ const AdminStudents = () => {
     setEditError('');
     setResetResult(null);
     setIsResetting(false);
+    setEditResult(null);
   };
 
   const closeEditModal = () => {
@@ -199,6 +202,10 @@ const AdminStudents = () => {
       setStudents((prev) =>
         prev.map((student) => (student.id === updated.id ? { ...student, ...updated } : student))
       );
+      setEditResult({
+        name: updated.full_name || updated.username || updated.email,
+        email: updated.email,
+      });
       closeEditModal();
     } catch (err) {
       const message =
@@ -263,10 +270,20 @@ const AdminStudents = () => {
     }
     setIsRemoving(true);
     try {
-      await deleteStudentApi(removeModal.student.id);
+      const removedStudent = removeModal.student;
+      await deleteStudentApi(removedStudent.id);
       setStudents((prev) =>
-        prev.filter((student) => student.id !== removeModal.student.id)
+        prev.filter((student) => student.id !== removedStudent.id)
       );
+      const removedName =
+        removedStudent.full_name ||
+        removedStudent.username ||
+        removedStudent.email ||
+        'Student';
+      setRemoveResult({
+        name: removedName,
+        email: removedStudent.email,
+      });
       closeRemoveModal();
     } catch (err) {
       const message =
@@ -433,6 +450,41 @@ const AdminStudents = () => {
               type="button"
               className="admin-feedback-dismiss"
               onClick={() => setInviteResult(null)}
+            >
+              &times;
+            </button>
+          </div>
+        )}
+        {removeResult && (
+          <div className="admin-feedback success" role="status">
+            <strong>Done.</strong> Removed {removeResult.name}'s information.
+            {removeResult.email && (
+              <div className="admin-feedback-password">
+                Account email: <code>{removeResult.email}</code>
+              </div>
+            )}
+            <button
+              type="button"
+              className="admin-feedback-dismiss"
+              onClick={() => setRemoveResult(null)}
+            >
+              &times;
+            </button>
+          </div>
+        )}
+
+        {editResult && (
+          <div className="admin-feedback success" role="status">
+            <strong>Done.</strong> Updated {editResult.name}'s details.
+            {editResult.email && (
+              <div className="admin-feedback-password">
+                Account email: <code>{editResult.email}</code>
+              </div>
+            )}
+            <button
+              type="button"
+              className="admin-feedback-dismiss"
+              onClick={() => setEditResult(null)}
             >
               &times;
             </button>
