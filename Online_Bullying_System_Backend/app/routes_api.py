@@ -271,9 +271,6 @@ def _protect_complaint_submission():
     return None
 
 
-_USERNAME_SANITIZE_PATTERN = re.compile(r"[^a-zA-Z0-9._-]")
-
-
 PASSWORD_RESET_STAGE_TTL_SECONDS = 10 * 60  # 10 minutes
 _PASSWORD_RESET_TOKENS: dict[str, tuple[int, float]] = {}
 _PASSWORD_RESET_LOCK = Lock()
@@ -325,14 +322,6 @@ def _get_password_reset_user(token: str) -> tuple[int | None, str | None]:
 def _consume_password_reset_token(token: str) -> None:
     with _PASSWORD_RESET_LOCK:
         _PASSWORD_RESET_TOKENS.pop(token, None)
-
-
-def _sanitize_username(value: str) -> str:
-    value = (value or "").strip().lower()
-    sanitized = _USERNAME_SANITIZE_PATTERN.sub("", value)
-    sanitized = sanitized.strip("._-")
-    return sanitized or "user"
-
 
 def _user_display_name(user: User) -> str:
     for candidate in (user.full_name, user.username, user.email):
@@ -859,46 +848,25 @@ def api_google_login():
     if not id_info.get("email_verified", True):
         return jsonify({"error": "Google email address is not verified."}), 403
 
-    full_name = id_info.get("name") or ""
-    preferred_username = id_info.get("preferred_username") or ""
-    google_sub = id_info.get("sub") or ""
-    picture = id_info.get("picture")
-
-    user = User.query.filter_by(email=email).first()
+    normalized_email = email.strip().lower()
+    user = User.query.filter(func.lower(User.email) == normalized_email).first()
     if not user:
-        base_username = preferred_username or email.split("@")[0] or f"user_{google_sub[:8]}"
-        base_candidate = _sanitize_username(base_username)
-        candidate = base_candidate
-        suffix = 1
-        while User.query.filter_by(username=candidate).first():
-            candidate = f"{base_candidate}{suffix}"
-            suffix += 1
-
-        user = User(
-            username=candidate,
-            email=email,
-            role=UserRole.STUDENT,
-            full_name=full_name or None,
-            avatar_url=picture or None,
-            status=UserStatus.ACTIVE.value,
-            invited_at=now_kuala_lumpur(),
+        current_app.logger.info("Google Sign-In blocked for unregistered email=%s", email)
+        return (
+            jsonify(
+                {
+                    "error": "No account found for this Google email. Please contact your administrator.",
+                }
+            ),
+            403,
         )
-        user.set_password(secrets.token_urlsafe(24))
-        current_app.logger.info("Created new user via Google Sign-In email=%s username=%s", email, candidate)
-        db.session.add(user)
-    else:
-        updated = False
-        if full_name and user.full_name != full_name:
-            user.full_name = full_name
-            updated = True
-        if picture and user.avatar_url != picture:
-            user.avatar_url = picture
-            updated = True
-        if (user.status or "").lower() == UserStatus.PENDING.value:
-            user.status = UserStatus.ACTIVE.value
-            updated = True
-        if updated:
-            current_app.logger.info("Updated Google profile details for user id=%s", user.id)
+
+    updated = False
+    if (user.status or "").lower() == UserStatus.PENDING.value:
+        user.status = UserStatus.ACTIVE.value
+        updated = True
+    if updated:
+        current_app.logger.info("Google Sign-In activated pending account id=%s", user.id)
 
     user.last_login_at = now_kuala_lumpur()
     db.session.commit()
