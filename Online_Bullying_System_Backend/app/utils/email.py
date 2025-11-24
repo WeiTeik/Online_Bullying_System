@@ -5,6 +5,7 @@ from typing import Iterable, Optional, Union
 from flask import current_app
 
 
+# Determines the sender address from config values, raising if missing.
 def _resolve_sender(default_sender: Optional[str], username: Optional[str]) -> str:
     sender = (default_sender or username or "").strip()
     if not sender:
@@ -12,6 +13,7 @@ def _resolve_sender(default_sender: Optional[str], username: Optional[str]) -> s
     return sender
 
 
+# Sends an email via SMTP using settings from the Flask app config.
 def send_email(
     subject: str,
     recipients: Union[str, Iterable[str]],

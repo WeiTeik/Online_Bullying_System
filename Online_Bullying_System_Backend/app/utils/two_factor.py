@@ -36,14 +36,17 @@ class TwoFactorTooManyAttemptsError(TwoFactorError):
     """Raised when the user exceeded the maximum number of attempts."""
 
 
+# Returns a SHA-256 hash of the provided verification code.
 def _hash_code(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
 
+# Generates a numeric verification code of the requested length.
 def _generate_code(length: int = DEFAULT_CODE_LENGTH) -> str:
     return "".join(secrets.choice(string.digits) for _ in range(max(1, length)))
 
 
+# Reads an integer setting from Flask config, falling back to a default on error.
 def _config_seconds(name: str, default: int) -> int:
     value = current_app.config.get(name, default)
     try:
@@ -52,6 +55,7 @@ def _config_seconds(name: str, default: int) -> int:
         return default
 
 
+# Removes expired two-factor challenges from the database.
 def cleanup_expired_challenges() -> None:
     """Remove expired challenges from the persistent store."""
     now = now_kuala_lumpur()
@@ -63,6 +67,7 @@ def cleanup_expired_challenges() -> None:
     db.session.commit()
 
 
+# Deletes a single challenge by its identifier if it exists.
 def invalidate_two_factor_challenge(challenge_id: str) -> None:
     if not challenge_id:
         return
@@ -72,6 +77,7 @@ def invalidate_two_factor_challenge(challenge_id: str) -> None:
         db.session.commit()
 
 
+# Deletes all existing challenges for a user before issuing a new one.
 def invalidate_user_challenges(user_id: int) -> None:
     if not user_id:
         return
@@ -117,6 +123,7 @@ def create_two_factor_challenge(
     return challenge_id, code
 
 
+# Validates a submitted code against stored challenge data, returning the user id on success.
 def verify_two_factor_code(challenge_id: str, submitted_code: str) -> int:
     """
     Validate the submitted code and return the associated user id.
