@@ -7,6 +7,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 KUALA_LUMPUR_TZ = ZoneInfo("Asia/Kuala_Lumpur")
 
 
+# Current timestamp in the Kuala Lumpur timezone.
 def now_kuala_lumpur() -> datetime:
     return datetime.now(KUALA_LUMPUR_TZ)
 
@@ -45,12 +46,15 @@ class User(db.Model):
         cascade="all, delete-orphan"
     )
 
+    # Hashes and stores the user's password using Werkzeug defaults (PBKDF2-SHA256).
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)
 
+    # Verifies a plaintext password against the stored hash.
     def check_password(self, password: str) -> bool:
         return check_password_hash(self.password_hash, password)
 
+    # Serialize user fields for API responses (excluding password hash).
     def to_dict(self):
         data = {
             "id": self.id,
@@ -108,11 +112,13 @@ class Complaint(db.Model):
         order_by="ComplaintComment.created_at"
     )
 
+    # Returns a display-safe student name respecting anonymity.
     def student_display_name(self) -> str:
         if self.anonymous:
             return "Anonymously"
         return self.student_name
 
+    # Serialize complaint fields, optionally including comments.
     def to_dict(self, include_comments: bool = False):
         status_value = self.status.value if isinstance(self.status, ComplaintStatus) else self.status
         if isinstance(status_value, str) and status_value.lower() == "pending":
@@ -151,6 +157,7 @@ class ComplaintComment(db.Model):
     message = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_kuala_lumpur)
 
+    # Serialize comment data with resolved author details.
     def to_dict(self):
         author = getattr(self, "author", None)
         display_name = (self.author_name or "").strip()

@@ -29,6 +29,7 @@ KEYBOARD_SEQUENCES = (
 )
 
 
+# Checks for ascending or descending sequences (including keyboard runs) of the given length.
 def _contains_ascending_sequence(value: str, length: int = 4) -> bool:
     normalized = value.lower()
     for seq in KEYBOARD_SEQUENCES + ("abcdefghijklmnopqrstuvwxyz", "0123456789"):
@@ -45,6 +46,7 @@ def _contains_ascending_sequence(value: str, length: int = 4) -> bool:
     return False
 
 
+# Checks if the string contains the same character repeated for the given length.
 def _contains_repeated_characters(value: str, length: int = 4) -> bool:
     for index in range(len(value) - length + 1):
         window = value[index : index + length]
@@ -53,6 +55,7 @@ def _contains_repeated_characters(value: str, length: int = 4) -> bool:
     return False
 
 
+# Determines if the password includes fragments of the user's personal information.
 def _contains_personal_information(password: str, user) -> bool:
     if not user:
         return False
@@ -81,6 +84,7 @@ def _contains_personal_information(password: str, user) -> bool:
     return False
 
 
+# Validates password strength rules and returns an error message or None if valid.
 def validate_password_strength(password: str, *, user=None) -> Optional[str]:
     if not password:
         return "Password is required."
@@ -118,6 +122,7 @@ def validate_password_strength(password: str, *, user=None) -> Optional[str]:
     return None
 
 
+# Generates a secure password that meets baseline complexity requirements.
 def generate_strong_password(length: int = 12, special_chars: str = DEFAULT_SPECIAL_CHARACTERS) -> str:
     """
     Generate a cryptographically secure password that satisfies the following:

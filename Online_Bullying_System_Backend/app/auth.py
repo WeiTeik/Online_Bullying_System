@@ -9,10 +9,12 @@ from flask import current_app, g, jsonify, request
 from app.models import LoginSession, User, db, now_kuala_lumpur
 
 
+# Returns a SHA-256 hash of a session token for storage/lookup.
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+# Reads an integer config value, falling back to a default when missing/invalid.
 def _get_config_seconds(name: str, default: int) -> int:
     try:
         return int(current_app.config.get(name, default))
@@ -20,12 +22,14 @@ def _get_config_seconds(name: str, default: int) -> int:
         return default
 
 
+# Normalizes role strings to a consistent uppercase form.
 def _normalize_role(value: Optional[str]) -> str:
     if value is None:
         return ""
     return str(value).replace("_", " ").replace("-", " ").strip().upper()
 
 
+# Issues and persists a new login session, returning the raw token details.
 def issue_session(user: User, *, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> dict:
     """
     Create a new session for the provided user and return the raw token payload.
@@ -61,6 +65,7 @@ def issue_session(user: User, *, ip_address: Optional[str] = None, user_agent: O
     }
 
 
+# Revokes an existing session identified by its raw token.
 def revoke_session(token: str) -> None:
     if not token:
         return
@@ -71,6 +76,7 @@ def revoke_session(token: str) -> None:
         db.session.commit()
 
 
+# Retrieves a valid session from a raw token, updating last-seen and idle expiry.
 def _get_session_from_token(token: str) -> Optional[LoginSession]:
     if not token:
         return None
@@ -94,6 +100,7 @@ def _get_session_from_token(token: str) -> Optional[LoginSession]:
     return session
 
 
+# Extracts the bearer token from the Authorization header.
 def _parse_bearer_token() -> str:
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
@@ -101,6 +108,7 @@ def _parse_bearer_token() -> str:
     return auth_header.split(" ", 1)[1].strip()
 
 
+# Decorator enforcing an authenticated session (optionally with role checks).
 def require_session(*, roles: Optional[Iterable[str]] = None) -> Callable:
     """
     Decorator to enforce authenticated sessions on API routes.
@@ -137,5 +145,6 @@ def require_session(*, roles: Optional[Iterable[str]] = None) -> Callable:
     return decorator
 
 
+# Returns the user attached to the current request context, if any.
 def get_current_user() -> Optional[User]:
     return getattr(g, "current_user", None)

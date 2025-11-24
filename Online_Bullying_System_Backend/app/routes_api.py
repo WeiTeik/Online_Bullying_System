@@ -59,6 +59,7 @@ from google.oauth2 import id_token as google_id_token
 api_bp = Blueprint("api", __name__)
 
 
+# Enforces API key header for API routes when configured.
 @api_bp.before_request
 def _require_api_key():
     """Reject requests missing the configured API key header."""
@@ -106,6 +107,7 @@ _SUSPICIOUS_CONTENT_PATTERNS = (
 )
 
 
+# Derives a client identifier using forwarded headers or remote address.
 def _extract_client_identifier() -> str:
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
@@ -118,6 +120,7 @@ def _extract_client_identifier() -> str:
     return request.remote_addr or "unknown"
 
 
+# Applies a sliding-window rate limit to complaint submissions.
 def _enforce_complaint_rate_limit():
     payload = request.get_json(silent=True) or {}
     identifiers = {f"ip:{_extract_client_identifier()}"}
@@ -148,6 +151,7 @@ def _enforce_complaint_rate_limit():
     return False, None
 
 
+# Normalizes payload values to trimmed single-space strings.
 def _normalize_payload_value(value: object) -> str:
     if value is None:
         return ""
@@ -156,6 +160,7 @@ def _normalize_payload_value(value: object) -> str:
     return normalized
 
 
+# Computes a deterministic fingerprint of complaint payloads for duplication checks.
 def _fingerprint_complaint_payload(payload):
     normalized = {
         "anonymous": bool(payload.get("anonymous")),
@@ -195,6 +200,7 @@ def _fingerprint_complaint_payload(payload):
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+# Checks if a complaint payload matches a recent submission.
 def _check_duplicate_complaint(payload):
     fingerprint = None
     if not isinstance(payload, dict):
@@ -214,6 +220,7 @@ def _check_duplicate_complaint(payload):
     return False, fingerprint
 
 
+# Registers a fingerprint so future duplicates can be detected.
 def _register_complaint_fingerprint(fingerprint):
     if not fingerprint:
         return
@@ -222,6 +229,7 @@ def _register_complaint_fingerprint(fingerprint):
         _COMPLAINT_FINGERPRINTS[fingerprint] = now
 
 
+# Tracks login attempts and enforces lockouts when thresholds are exceeded.
 def _check_login_rate_limit(identifier: str | None) -> tuple[bool, int | None]:
     now = time.time()
     keys = {f"ip:{_extract_client_identifier()}"}
@@ -250,6 +258,7 @@ def _check_login_rate_limit(identifier: str | None) -> tuple[bool, int | None]:
     return True, None
 
 
+# Clears login rate-limit counters for the given identifier/IP set.
 def _reset_login_rate_limit(identifier: str | None) -> None:
     keys = {f"ip:{_extract_client_identifier()}"}
     if identifier:
@@ -260,6 +269,7 @@ def _reset_login_rate_limit(identifier: str | None) -> None:
             _LOGIN_LOCKED_UNTIL.pop(key, None)
 
 
+# Determines if a user should be prompted for two-factor verification.
 def _requires_two_factor(user: User) -> bool:
     if not user:
         return True
@@ -273,6 +283,7 @@ def _requires_two_factor(user: User) -> bool:
     return False
 
 
+# Checks whether the given user has admin-level privileges.
 def _is_admin(user: User | None) -> bool:
     if not user:
         return False
@@ -280,6 +291,7 @@ def _is_admin(user: User | None) -> bool:
     return role_value in {"ADMIN", "SUPER ADMIN"}
 
 
+# Scans complaint fields for suspicious script-like content.
 def _detect_suspicious_complaint_content(payload):
     suspicious_fields = []
     if not isinstance(payload, dict):
@@ -318,6 +330,7 @@ def _detect_suspicious_complaint_content(payload):
     return suspicious_fields
 
 
+# Applies rate limiting specifically to complaint POST submissions.
 @api_bp.before_request
 def _protect_complaint_submission():
     if request.method != "POST":
@@ -341,6 +354,7 @@ _PASSWORD_RESET_TOKENS: dict[str, tuple[int, float]] = {}
 _PASSWORD_RESET_LOCK = Lock()
 
 
+# Removes expired password reset tokens from the in-memory store.
 def _cleanup_password_reset_tokens(now: float | None = None) -> None:
     current = time.time() if now is None else now
     with _PASSWORD_RESET_LOCK:
@@ -353,6 +367,7 @@ def _cleanup_password_reset_tokens(now: float | None = None) -> None:
             _PASSWORD_RESET_TOKENS.pop(token, None)
 
 
+# Generates and stores a temporary password reset token for a user.
 def _create_password_reset_token(user_id: int) -> tuple[str, int]:
     _cleanup_password_reset_tokens()
     token = secrets.token_urlsafe(48)
@@ -369,6 +384,7 @@ def _create_password_reset_token(user_id: int) -> tuple[str, int]:
     return token, PASSWORD_RESET_STAGE_TTL_SECONDS
 
 
+# Retrieves the user associated with a reset token, handling expiration.
 def _get_password_reset_user(token: str) -> tuple[int | None, str | None]:
     if not token:
         return None, "invalid"
@@ -384,10 +400,13 @@ def _get_password_reset_user(token: str) -> tuple[int | None, str | None]:
         return user_id, None
 
 
+# Consumes and removes a password reset token.
 def _consume_password_reset_token(token: str) -> None:
     with _PASSWORD_RESET_LOCK:
         _PASSWORD_RESET_TOKENS.pop(token, None)
 
+
+# Chooses the best human-friendly name to display for a user.
 def _user_display_name(user: User) -> str:
     for candidate in (user.full_name, user.username, user.email):
         candidate = (candidate or "").strip()
@@ -396,6 +415,7 @@ def _user_display_name(user: User) -> str:
     return "YouMatter User"
 
 
+# Masks an email for display by obscuring the local part.
 def _mask_email(email: str) -> str:
     if not email:
         return ""
@@ -414,6 +434,7 @@ def _mask_email(email: str) -> str:
     return f"{masked_local}@{domain}"
 
 
+# Sends a temporary password email to the user with text and HTML bodies.
 def _send_password_reset_email(user: User, temporary_password: str) -> None:
     display_name = _user_display_name(user)
     email = (user.email or "").strip()
@@ -466,6 +487,7 @@ def _send_password_reset_email(user: User, temporary_password: str) -> None:
     send_email("YouMatter Temporary Password", email, text_body, html_body=html_body)
 
 
+# Sends a two-factor verification code email to the user.
 def _send_two_factor_code_email(user: User, verification_code: str) -> None:
     display_name = _user_display_name(user)
     email = (user.email or "").strip()
@@ -515,6 +537,7 @@ def _send_two_factor_code_email(user: User, verification_code: str) -> None:
     send_email("Your YouMatter verification code", email, text_body, html_body=html_body)
 
 
+# Finalizes a login, updating user metadata and issuing a session token.
 def _complete_login_success(user: User, *, mark_two_factor_verified: bool = False):
     updated = False
     if (user.status or "").lower() == UserStatus.PENDING.value:
@@ -538,12 +561,16 @@ def _complete_login_success(user: User, *, mark_two_factor_verified: bool = Fals
         "session": session_payload,
     }
 
+
+# Lists all users (admin or super admin required).
 @api_bp.route("/users", methods=["GET"])
 @require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_get_users():
     users = get_all_users()
     return jsonify(users), 200
 
+
+# Returns a specific user if requester is self or admin.
 @api_bp.route("/users/<int:user_id>", methods=["GET"])
 @require_session()
 def api_get_user(user_id):
@@ -557,6 +584,8 @@ def api_get_user(user_id):
         return jsonify({"error": "Forbidden"}), 403
     return jsonify(user), 200
 
+
+# Creates a new user account (admin-only).
 @api_bp.route("/users", methods=["POST"])
 @require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_create_user():
@@ -567,6 +596,8 @@ def api_create_user():
         return jsonify(result[0]), result[1]
     return jsonify(result), 201
 
+
+# Updates a user profile (self or admin).
 @api_bp.route("/users/<int:user_id>", methods=["PUT"])
 @require_session()
 def api_update_user(user_id):
@@ -583,6 +614,8 @@ def api_update_user(user_id):
         return jsonify(result[0]), result[1]
     return jsonify(result), 200
 
+
+# Deletes a user (admin-only).
 @api_bp.route("/users/<int:user_id>", methods=["DELETE"])
 @require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_delete_user(user_id):
@@ -592,6 +625,7 @@ def api_delete_user(user_id):
     return jsonify({"success": True}), 200
 
 
+# Lists all students (admin-only).
 @api_bp.route("/admin/students", methods=["GET"])
 @require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_list_students():
@@ -602,6 +636,7 @@ def api_list_students():
     return jsonify(students), 200
 
 
+# Invites a student and returns temporary credentials (admin-only).
 @api_bp.route("/admin/students", methods=["POST"])
 @require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_invite_student():
@@ -620,6 +655,7 @@ def api_invite_student():
     return jsonify({"student": student, "temporary_password": temporary_password}), 201
 
 
+# Updates student info (admin-only).
 @api_bp.route("/admin/students/<int:student_id>", methods=["PATCH"])
 @require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_update_student(student_id):
@@ -637,6 +673,7 @@ def api_update_student(student_id):
     return jsonify(student), 200
 
 
+# Resets a student's password and returns the temporary password (admin-only).
 @api_bp.route("/admin/students/<int:student_id>/reset_password", methods=["POST"])
 @require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_reset_student_password(student_id):
@@ -651,6 +688,7 @@ def api_reset_student_password(student_id):
     return jsonify({"student": student, "temporary_password": temporary_password}), 200
 
 
+# Removes a student account (admin-only).
 @api_bp.route("/admin/students/<int:student_id>", methods=["DELETE"])
 @require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_remove_student(student_id):
@@ -663,6 +701,7 @@ def api_remove_student(student_id):
     return jsonify({"success": True}), 200
 
 
+# Invites an admin or super admin (admin-only).
 @api_bp.route("/admin/admins", methods=["POST"])
 @require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_invite_admin():
@@ -682,6 +721,7 @@ def api_invite_admin():
     return jsonify({"admin": admin, "temporary_password": temporary_password}), 201
 
 
+# Returns complaints list (filtered by user unless admin).
 @api_bp.route("/complaints", methods=["GET"])
 @require_session()
 def api_get_complaints():
@@ -700,6 +740,7 @@ def api_get_complaints():
     return jsonify(complaints), 200
 
 
+# Fetches a complaint by numeric id or reference code.
 @api_bp.route("/complaints/<complaint_identifier>", methods=["GET"])
 def api_get_complaint(complaint_identifier):
     identifier = (complaint_identifier or "").strip()
@@ -716,6 +757,7 @@ def api_get_complaint(complaint_identifier):
     return jsonify(complaint), 200
 
 
+# Creates a new complaint submission with duplicate and content checks.
 @api_bp.route("/complaints", methods=["POST"])
 def api_create_complaint():
     data = request.get_json() or {}
@@ -756,6 +798,7 @@ def api_create_complaint():
     return jsonify(complaint.to_dict(include_comments=True)), 201
 
 
+# Retrieves comments for a complaint (restricted to owners/admins).
 @api_bp.route("/complaints/<int:complaint_id>/comments", methods=["GET"])
 @require_session()
 def api_get_complaint_comments(complaint_id):
@@ -772,6 +815,7 @@ def api_get_complaint_comments(complaint_id):
     return jsonify(comments), 200
 
 
+# Adds a comment to a complaint for permitted users.
 @api_bp.route("/complaints/<int:complaint_id>/comments", methods=["POST"])
 @require_session()
 def api_add_comment(complaint_id):
@@ -798,6 +842,7 @@ def api_add_comment(complaint_id):
     return jsonify(comment.to_dict()), 201
 
 
+# Updates a complaint status (admin-only).
 @api_bp.route("/complaints/<int:complaint_id>/status", methods=["PATCH"])
 @require_session(roles={"ADMIN", "SUPER ADMIN"})
 def api_update_complaint_status(complaint_id):
@@ -814,6 +859,7 @@ def api_update_complaint_status(complaint_id):
     return jsonify(complaint.to_dict(include_comments=True)), 200
 
 
+# Changes a user's password after validating ownership and strength.
 @api_bp.route("/users/<int:user_id>/password", methods=["POST"])
 @require_session()
 def api_change_password(user_id):
@@ -848,6 +894,8 @@ def api_change_password(user_id):
     db.session.commit()
     return jsonify({"success": True, "message": "Password updated successfully."}), 200
 
+
+# Initiates a forgot-password flow by sending a temporary password.
 @api_bp.route("/auth/forgot-password", methods=["POST"])
 def api_forgot_password():
     data = request.get_json() or {}
@@ -883,6 +931,8 @@ def api_forgot_password():
     db.session.commit()
     return jsonify({"success": True, "message": "Temporary password has been emailed to you."}), 200
 
+
+# Handles username/email + password login and triggers 2FA when required.
 @api_bp.route("/auth/login", methods=["POST"])
 def api_login():
     data = request.get_json() or {}
@@ -964,6 +1014,7 @@ def api_login():
     return jsonify(login_payload), 200
 
 
+# Completes Google OAuth login for registered users.
 @api_bp.route("/auth/google", methods=["POST"])
 def api_google_login():
     data = request.get_json() or {}
@@ -1013,6 +1064,7 @@ def api_google_login():
     return jsonify(payload), 200
 
 
+# Verifies 2FA codes and optional password resets during login.
 @api_bp.route("/auth/verify-2fa", methods=["POST"])
 def api_verify_two_factor():
     data = request.get_json() or {}
@@ -1132,6 +1184,7 @@ def api_verify_two_factor():
     return jsonify(user_dict), 200
 
 
+# Logs out by revoking the bearer session token.
 @api_bp.route("/auth/logout", methods=["POST"])
 @require_session()
 def api_logout():
@@ -1144,6 +1197,7 @@ def api_logout():
     return jsonify({"success": True}), 200
 
 
+# Determines an image extension from a data URL header.
 def _detect_extension_from_header(header: str) -> str:
     header = (header or "").lower()
     if "jpeg" in header or "jpg" in header:
@@ -1155,6 +1209,7 @@ def _detect_extension_from_header(header: str) -> str:
     return "png"
 
 
+# Uploads and stores a user's avatar image.
 @api_bp.route("/users/<int:user_id>/avatar", methods=["POST"])
 @require_session()
 def api_upload_avatar(user_id):
@@ -1212,6 +1267,7 @@ def api_upload_avatar(user_id):
     return jsonify(user.to_dict()), 200
 
 
+# Deletes a user's avatar (and removes managed file if present).
 @api_bp.route("/users/<int:user_id>/avatar", methods=["DELETE"])
 @require_session()
 def api_delete_avatar(user_id):
@@ -1242,6 +1298,7 @@ def api_delete_avatar(user_id):
     return jsonify(user.to_dict()), 200
 
 
+# Serves stored avatar files.
 @api_bp.route("/static/avatars/<path:filename>", methods=["GET"])
 def api_get_avatar(filename):
     upload_root = current_app.config.get("UPLOAD_FOLDER")
@@ -1253,6 +1310,7 @@ def api_get_avatar(filename):
     return send_from_directory(target_dir, filename)
 
 
+# Serves complaint attachment files by reference code.
 @api_bp.route("/static/complaints/<reference_code>/<path:filename>", methods=["GET"])
 def api_get_complaint_attachment(reference_code, filename):
     upload_root = current_app.config.get("UPLOAD_FOLDER")
