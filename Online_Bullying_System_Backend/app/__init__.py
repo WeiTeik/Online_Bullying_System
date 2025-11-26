@@ -40,8 +40,8 @@ def create_app():
             app.logger.warning("Could not create upload directory at %s", upload_root)
 
     # Import and register routes
-    from .routes import bp
-    app.register_blueprint(bp)
+    # from .routes import bp
+    # app.register_blueprint(bp)
 
     from .routes_user import user_bp
     app.register_blueprint(user_bp)
