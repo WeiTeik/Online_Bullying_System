@@ -8,6 +8,10 @@ from app.models import (
     User,
     UserRole,
     UserStatus,
+    Complaint,
+    ComplaintComment,
+    LoginSession,
+    TwoFactorChallengeModel,
     db,
     now_kuala_lumpur,
 )
@@ -262,6 +266,13 @@ def reset_student_password(student_id: int) -> Tuple[Dict, str]:
 def remove_student(student_id: int) -> None:
     student = _get_student(student_id)
     try:
+        # clean up linked records that do not cascade on delete
+        LoginSession.query.filter_by(user_id=student.id).delete(synchronize_session=False)
+        TwoFactorChallengeModel.query.filter_by(user_id=student.id).delete(synchronize_session=False)
+        ComplaintComment.query.filter_by(author_id=student.id).update(
+            {"author_id": None}, synchronize_session=False
+        )
+        Complaint.query.filter_by(user_id=student.id).update({"user_id": None}, synchronize_session=False)
         db.session.delete(student)
         db.session.commit()
     except SQLAlchemyError as exc:
