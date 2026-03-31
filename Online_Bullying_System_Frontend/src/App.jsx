@@ -117,8 +117,18 @@ function App() {
 
   const handleSubmitComplaint = (complaint) => {
     if (!complaint) return
-    setComplaints(prev => [complaint, ...prev])
-    navigate('/status')
+    setComplaints(prev => {
+      if (prev.some(existing => existing.id === complaint.id)) {
+        return prev
+      }
+      return [complaint, ...prev]
+    })
+    navigate('/status', {
+      state: {
+        complaintId: complaint.id,
+        submissionReferenceCode: complaint.reference_code || null,
+      },
+    })
   }
 
   useEffect(() => {
@@ -526,8 +536,10 @@ function App() {
               <Link
                 className="nav-link"
                 to="/status"
-                onClick={(e) => handleProtectedNav(e, '/status')}
-                aria-disabled={!currentUser}
+                onClick={() => {
+                  setIsMobileNavOpen(false)
+                  setShowUserMenu(false)
+                }}
               >
                 Check Status
               </Link>
