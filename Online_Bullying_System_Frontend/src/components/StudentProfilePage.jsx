@@ -124,7 +124,7 @@ function StudentProfilePage({
     return () => {
       isMounted = false;
     };
-  }, [currentUser?.id, navigate, onUserUpdate]);
+  }, [currentUser, currentUser?.id, navigate, onUserUpdate]);
 
   useEffect(() => {
     if (!allowNameEdit) {

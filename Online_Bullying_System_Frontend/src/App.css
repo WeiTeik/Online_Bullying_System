@@ -1322,10 +1322,196 @@ input:checked + .slider:before {
   text-align: center;
 }
 
+.complaint-status-intro {
+  margin: -0.5rem auto 1.5rem;
+  max-width: 720px;
+  text-align: center;
+  color: #5f6c7b;
+}
+
+.status-reference-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  padding: 1.35rem 1.5rem;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #1f4f8f 0%, #3d7dc4 100%);
+  color: #ffffff;
+  box-shadow: 0 12px 28px rgba(31, 79, 143, 0.18);
+}
+
+.status-reference-banner h3 {
+  margin: 0.2rem 0 0.5rem;
+}
+
+.status-reference-banner__eyebrow {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.86;
+}
+
+.status-reference-banner__code {
+  margin: 0 0 0.5rem;
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.status-reference-banner__text {
+  margin: 0;
+  max-width: 560px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.status-reference-banner__actions {
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.status-reference-copy-btn,
+.status-reference-dismiss-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.status-reference-copy-btn {
+  background: #ffffff;
+  color: #1f4f8f;
+}
+
+.status-reference-dismiss-btn {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.status-reference-feedback {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.status-lookup-panel {
+  margin-bottom: 1.75rem;
+  padding: 1.4rem 1.5rem;
+  border: 1px solid #dbe6f5;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+}
+
+.status-lookup-panel__copy h3 {
+  margin: 0 0 0.35rem;
+  color: #173b67;
+}
+
+.status-lookup-panel__copy p {
+  margin: 0 0 1rem;
+  color: #5a6d82;
+}
+
+.status-lookup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.status-lookup-label {
+  font-weight: 700;
+  color: #173b67;
+}
+
+.status-lookup-form__controls {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.status-lookup-form__controls input {
+  flex: 1;
+  padding: 0.85rem 1rem;
+  border: 1px solid #b7cbe4;
+  border-radius: 10px;
+  font-size: 1rem;
+  text-transform: uppercase;
+}
+
+.status-lookup-form__controls button {
+  border: none;
+  border-radius: 10px;
+  padding: 0.85rem 1.15rem;
+  background: #1f4f8f;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.status-lookup-form__controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.status-lookup-error,
+.status-lookup-message {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.status-lookup-error {
+  color: #c0392b;
+}
+
+.status-lookup-message {
+  color: #1f6f43;
+}
+
+.status-lookup-result,
+.status-history-section {
+  display: grid;
+  gap: 1rem;
+}
+
+.status-history-section {
+  margin-top: 1.5rem;
+}
+
+.status-section-heading h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.status-section-heading p {
+  margin: 0.3rem 0 0;
+  color: #7f8c8d;
+}
+
 .no-complaints {
   text-align: center;
   padding: 3rem;
   color: #7f8c8d;
+}
+
+.status-empty-state {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border-radius: 14px;
+  background: #f7f9fc;
+  border: 1px dashed #c7d4e5;
+  text-align: center;
+  color: #596b7d;
+}
+
+.status-empty-state h3 {
+  margin-bottom: 0.5rem;
+  color: #2c3e50;
 }
 
 .complaints-list {
@@ -2376,6 +2562,19 @@ input:checked + .slider:before {
   .complaint-status {
     padding: 1.75rem 1.25rem;
     margin: 1.5rem 1rem 5rem;
+  }
+
+  .status-reference-banner {
+    flex-direction: column;
+  }
+
+  .status-reference-banner__actions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .status-lookup-form__controls {
+    flex-direction: column;
   }
 
   .complaint-details {

@@ -416,11 +416,16 @@ function SubmitComplaint({ onSubmit, currentUser }) {
 
     try {
       const created = await createComplaint(payload)
+      resetForm()
       if (onSubmit) {
         onSubmit(created)
+        return
       }
-      resetForm()
-      setSubmitSuccess('Complaint submitted successfully.')
+      setSubmitSuccess(
+        created?.reference_code
+          ? `Complaint submitted successfully. Save reference code ${created.reference_code}.`
+          : 'Complaint submitted successfully.'
+      )
     } catch (err) {
       const responseData = err?.response?.data || {}
       let message =
